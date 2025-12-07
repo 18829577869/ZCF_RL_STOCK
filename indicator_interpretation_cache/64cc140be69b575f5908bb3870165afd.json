@@ -1,0 +1,34 @@
+{
+  "summary": "技术指标基础分析",
+  "kdj_analysis": {
+    "values": {
+      "K": 58.1422692486564,
+      "D": 28.51263962125259,
+      "J": 117.40152850346402
+    },
+    "signal": "看涨",
+    "description": "K线上穿D线，形成看涨信号"
+  },
+  "rsi_analysis": {
+    "value": 69.1176470418829,
+    "signal": "偏强",
+    "description": "RSI=69.1，处于强势区域"
+  },
+  "obv_analysis": {
+    "obv_ratio": -0.14023364188538756,
+    "signal": "缩量",
+    "description": "OBV比率=-0.14，显示成交量萎缩，资金观望"
+  },
+  "macd_analysis": {
+    "values": {
+      "DIF": 0.0477056179325146,
+      "DEA": -0.009198010836939923,
+      "MACD": 0.11380725753890905
+    },
+    "signal": "看涨",
+    "description": "MACD金叉，柱状图为正，显示上升动能"
+  },
+  "source": "basic",
+  "overall_signal": "看涨",
+  "trading_suggestion": "技术指标综合显示看涨信号，可考虑买入或加仓"
+}

@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": 0.2,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.3,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.0,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "宏观经济温和复苏但动能不足，市场情绪谨慎乐观；地缘政治不确定性及外部金融环境波动（如美联储政策）是主要风险源，但国内稳增长政策提供了一定支撑。",
+  "date": "2025-12-07",
+  "source": "deepseek",
+  "timestamp": "2025-12-07T00:04:07.744701"
+}
