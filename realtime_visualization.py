@@ -88,7 +88,8 @@ class RealTimeVisualizer:
     def __init__(self,
                  data_window_size: int = 100,
                  update_interval: float = 1.0,
-                 output_dir: str = "visualization_output"):
+                 output_dir: str = "visualization_output",
+                 max_history_files: int = 24):  # V12优化：最大保留历史图表文件数（24小时）
         """
         初始化可视化器
         
@@ -96,11 +97,16 @@ class RealTimeVisualizer:
             data_window_size: 数据窗口大小（显示最近N个数据点）
             update_interval: 更新间隔（秒）
             output_dir: 输出目录
+            max_history_files: 最大保留历史图表文件数（默认24个，即最近24小时）
         """
         self.data_window_size = data_window_size
         self.update_interval = update_interval
         self.output_dir = output_dir
+        self.max_history_files = max_history_files  # V12优化：限制历史文件数量
         os.makedirs(output_dir, exist_ok=True)
+        
+        # V12优化：记录上次保存历史图表的小时
+        self.last_hourly_save = None
         
         # 数据存储
         self.price_history = []
@@ -578,22 +584,58 @@ class RealTimeVisualizer:
         with open(filepath, 'w', encoding='utf-8') as f:
             f.write(html_content)
     
+    def cleanup_old_history_files(self):
+        """V12优化：清理旧的历史图表文件，只保留最新的N个"""
+        try:
+            import glob
+            # 查找所有历史图表文件（price_chart_hourly_*.png）
+            pattern = os.path.join(self.output_dir, 'price_chart_hourly_*.png')
+            history_files = glob.glob(pattern)
+            
+            if len(history_files) > self.max_history_files:
+                # 按修改时间排序（最新的在前）
+                history_files.sort(key=lambda x: os.path.getmtime(x), reverse=True)
+                # 删除超出数量的旧文件
+                for old_file in history_files[self.max_history_files:]:
+                    try:
+                        os.remove(old_file)
+                    except:
+                        pass
+        except Exception as e:
+            # 静默处理清理错误
+            pass
+    
     def auto_update_charts(self):
-        """自动更新图表（后台线程）"""
+        """自动更新图表（后台线程）- V12优化：减少文件数量"""
         while self.running:
             try:
-                # 保存图表
-                timestamp_str = datetime.now().strftime('%Y%m%d_%H%M%S')
+                now = datetime.now()
+                current_hour = now.strftime('%Y%m%d_%H')  # 只精确到小时
                 
-                # 价格图
+                # V12优化：实时图表覆盖同一个文件（用于Web界面实时显示）
                 try:
-                    price_path = os.path.join(self.output_dir, f'price_chart_{timestamp_str}.png')
-                    self.plot_price_chart(save_path=price_path)
+                    # 实时图表：覆盖同一个文件，不生成新文件
+                    price_current_path = os.path.join(self.output_dir, 'price_chart_current.png')
+                    self.plot_price_chart(save_path=price_current_path)
                 except Exception as e:
                     # 静默处理价格图错误
                     pass
                 
-                # 综合仪表板
+                # V12优化：每小时保存一个历史图表（用于历史记录）
+                should_save_hourly = (self.last_hourly_save != current_hour)
+                if should_save_hourly:
+                    try:
+                        price_hourly_path = os.path.join(self.output_dir, f'price_chart_hourly_{current_hour}.png')
+                        self.plot_price_chart(save_path=price_hourly_path)
+                        self.last_hourly_save = current_hour
+                        
+                        # 清理旧的历史文件
+                        self.cleanup_old_history_files()
+                    except Exception as e:
+                        # 静默处理历史图表保存错误
+                        pass
+                
+                # 综合仪表板（覆盖同一个文件）
                 try:
                     dashboard_path = os.path.join(self.output_dir, 'dashboard.png')
                     self.plot_comprehensive_dashboard(save_path=dashboard_path)
@@ -601,7 +643,7 @@ class RealTimeVisualizer:
                     # 静默处理仪表板错误
                     pass
                 
-                # HTML仪表板
+                # HTML仪表板（覆盖同一个文件）
                 try:
                     html_path = os.path.join(self.output_dir, 'dashboard.html')
                     self.generate_html_dashboard(html_path)
@@ -609,7 +651,7 @@ class RealTimeVisualizer:
                     # 静默处理HTML错误
                     pass
                 
-                # 导出数据
+                # 导出数据（覆盖同一个文件）
                 try:
                     csv_path = os.path.join(self.output_dir, 'data.csv')
                     self.export_data(csv_path)
