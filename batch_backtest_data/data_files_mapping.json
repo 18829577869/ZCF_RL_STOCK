@@ -1,0 +1,16 @@
+{
+  "sh.600343": "batch_backtest_data\\sh_600343_航天动力.csv",
+  "sh.603601": "batch_backtest_data\\sh_603601_再升科技.csv",
+  "sh.600776": "batch_backtest_data\\sh_600776_东方通信.csv",
+  "sh.601399": "batch_backtest_data\\sh_601399_国机重装.csv",
+  "sz.002371": "batch_backtest_data\\sz_002371_北方华创.csv",
+  "sh.601012": "batch_backtest_data\\sh_601012_隆基绿能.csv",
+  "sh.600693": "batch_backtest_data\\sh_600693_东百集团.csv",
+  "sz.002706": "batch_backtest_data\\sz_002706_良信股份.csv",
+  "sh.688676": "batch_backtest_data\\sh_688676_金盘科技.csv",
+  "sz.002837": "batch_backtest_data\\sz_002837_英维克.csv",
+  "sz.300499": "batch_backtest_data\\sz_300499_高澜股份.csv",
+  "sz.300153": "batch_backtest_data\\sz_300153_科泰电源.csv",
+  "sz.002927": "batch_backtest_data\\sz_002927_泰永长征.csv",
+  "sz.001208": "batch_backtest_data\\sz_001208_华菱线缆.csv"
+}

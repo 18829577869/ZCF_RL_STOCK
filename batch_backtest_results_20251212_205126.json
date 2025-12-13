@@ -1,0 +1,13 @@
+[
+  {
+    "stock_code": "sh.600343",
+    "stock_name": "航天动力",
+    "theme": "商业航天",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.172973735094844,
+      "rmse": 0.20984137602297318,
+      "mape": 0.4298792253745437,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 

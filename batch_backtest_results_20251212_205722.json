@@ -1,0 +1,240 @@
+[
+  {
+    "stock_code": "sh.600343",
+    "stock_name": "航天动力",
+    "theme": "商业航天",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.24420956823898834,
+      "rmse": 0.2575119123079722,
+      "mape": 0.6057001591308869,
+      "direction_accuracy": 66.66666666666666,
+      "sample_count": 10
+    },
+    "final_price": 40.56285020285911,
+    "initial_price": 40.12,
+    "price_change": 1.1038140649529227
+  },
+  {
+    "stock_code": "sh.603601",
+    "stock_name": "再升科技",
+    "theme": "商业航天",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.025542921845200794,
+      "rmse": 0.02836134308830464,
+      "mape": 0.3030937428801941,
+      "direction_accuracy": 33.33333333333333,
+      "sample_count": 10
+    },
+    "final_price": 8.426375971272554,
+    "initial_price": 8.43,
+    "price_change": -0.04298966461975807
+  },
+  {
+    "stock_code": "sh.600776",
+    "stock_name": "东方通信",
+    "theme": "商业航天",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.08258067529123334,
+      "rmse": 0.09236344557718856,
+      "mape": 0.5137400783897754,
+      "direction_accuracy": 66.66666666666666,
+      "sample_count": 10
+    },
+    "final_price": 15.942900104500621,
+    "initial_price": 16.09,
+    "price_change": -0.9142317930352922
+  },
+  {
+    "stock_code": "sh.601399",
+    "stock_name": "国机重装",
+    "theme": "可控核聚变",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.02191729371951272,
+      "rmse": 0.025604225126326284,
+      "mape": 0.42648805488973773,
+      "direction_accuracy": 66.66666666666666,
+      "sample_count": 10
+    },
+    "final_price": 5.128377086569639,
+    "initial_price": 5.18,
+    "price_change": -0.9965813403544546
+  },
+  {
+    "stock_code": "sz.002371",
+    "stock_name": "北方华创",
+    "theme": "半导体设备",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 2.3547088839385766,
+      "rmse": 2.6881298458770013,
+      "mape": 0.5179929884156937,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 454.90241209772216,
+    "initial_price": 455.1,
+    "price_change": -0.0434163705290837
+  },
+  {
+    "stock_code": "sh.601012",
+    "stock_name": "隆基绿能",
+    "theme": "光伏\"反内卷\"",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.10413416908936135,
+      "rmse": 0.11462778276068951,
+      "mape": 0.5713996516626423,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 18.388297249318217,
+    "initial_price": 18.19,
+    "price_change": 1.0901443063123475
+  },
+  {
+    "stock_code": "sh.600693",
+    "stock_name": "东百集团",
+    "theme": "消费复苏（事件驱动）",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.06624743105664432,
+      "rmse": 0.07856992370446768,
+      "mape": 0.44302256066337686,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 14.929162615671812,
+    "initial_price": 14.9,
+    "price_change": 0.19572225283095074
+  },
+  {
+    "stock_code": "sz.002706",
+    "stock_name": "良信股份",
+    "theme": "数据中心配电",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.04128360092018006,
+      "rmse": 0.05281625319948042,
+      "mape": 0.4146266640566583,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 9.908011628837237,
+    "initial_price": 9.98,
+    "price_change": -0.7213263643563507
+  },
+  {
+    "stock_code": "sh.688676",
+    "stock_name": "金盘科技",
+    "theme": "数据中心配电",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.3506128356970777,
+      "rmse": 0.4685760025949504,
+      "mape": 0.42328692033287896,
+      "direction_accuracy": 88.88888888888889,
+      "sample_count": 10
+    },
+    "final_price": 82.71895483104957,
+    "initial_price": 83.3,
+    "price_change": -0.6975332160269205
+  },
+  {
+    "stock_code": "sz.002837",
+    "stock_name": "英维克",
+    "theme": "数据中心冷却",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.3302191218139455,
+      "rmse": 0.3946666835931791,
+      "mape": 0.4205080014728857,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 77.87669735987244,
+    "initial_price": 78.87,
+    "price_change": -1.2594175733835005
+  },
+  {
+    "stock_code": "sz.300499",
+    "stock_name": "高澜股份",
+    "theme": "数据中心冷却",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.14907490005642537,
+      "rmse": 0.16477303644431646,
+      "mape": 0.5417245109781907,
+      "direction_accuracy": 44.44444444444444,
+      "sample_count": 10
+    },
+    "final_price": 27.68245407658358,
+    "initial_price": 27.48,
+    "price_change": 0.7367324475384937
+  },
+  {
+    "stock_code": "sz.300153",
+    "stock_name": "科泰电源",
+    "theme": "数据中心备用电源",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.2204014499868226,
+      "rmse": 0.2297729939551674,
+      "mape": 0.710678737894588,
+      "direction_accuracy": 66.66666666666666,
+      "sample_count": 10
+    },
+    "final_price": 31.137161706974943,
+    "initial_price": 30.91,
+    "price_change": 0.734913319233074
+  },
+  {
+    "stock_code": "sz.002927",
+    "stock_name": "泰永长征",
+    "theme": "数据中心电源/线缆",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.08263974976442227,
+      "rmse": 0.09285251950121952,
+      "mape": 0.41084583509734107,
+      "direction_accuracy": 100.0,
+      "sample_count": 10
+    },
+    "final_price": 20.035466325457836,
+    "initial_price": 20.16,
+    "price_change": -0.6177265602289876
+  },
+  {
+    "stock_code": "sz.001208",
+    "stock_name": "华菱线缆",
+    "theme": "数据中心线缆",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.08066473385091584,
+      "rmse": 0.09086773346905123,
+      "mape": 0.48890044024364704,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 16.42566818988753,
+    "initial_price": 16.34,
+    "price_change": 0.5242851278306705
+  }
+]

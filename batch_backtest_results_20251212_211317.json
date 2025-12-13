@@ -1,0 +1,366 @@
+[
+  {
+    "stock_code": "sh.600343",
+    "stock_name": "航天动力",
+    "theme": "商业航天",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.21564403724710246,
+      "rmse": 0.25802161275680285,
+      "mape": 0.5392726954468913,
+      "direction_accuracy": 66.66666666666666,
+      "sample_count": 10
+    },
+    "final_price": 39.88674746779499,
+    "initial_price": 40.12,
+    "price_change": -0.5813871690055021,
+    "total_return": -0.005813871690055022,
+    "sharpe_ratio": 5.657865549908028,
+    "max_drawdown": 13.715389568576942,
+    "max_drawdown_info": {
+      "max_drawdown": -0.1371538956857694,
+      "max_drawdown_pct": 13.715389568576942,
+      "peak_index": 7,
+      "trough_index": 16
+    }
+  },
+  {
+    "stock_code": "sh.603601",
+    "stock_name": "再升科技",
+    "theme": "商业航天",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.04534761316246847,
+      "rmse": 0.05212873917810337,
+      "mape": 0.537451263917982,
+      "direction_accuracy": 33.33333333333333,
+      "sample_count": 10
+    },
+    "final_price": 8.43685234789605,
+    "initial_price": 8.43,
+    "price_change": 0.08128526567081909,
+    "total_return": 0.000812852656708191,
+    "sharpe_ratio": 3.116157172085752,
+    "max_drawdown": 30.577223088923557,
+    "max_drawdown_info": {
+      "max_drawdown": -0.30577223088923555,
+      "max_drawdown_pct": 30.577223088923557,
+      "peak_index": 5,
+      "trough_index": 65
+    }
+  },
+  {
+    "stock_code": "sh.600776",
+    "stock_name": "东方通信",
+    "theme": "商业航天",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.09509974423258374,
+      "rmse": 0.10145102287525924,
+      "mape": 0.5924430658689303,
+      "direction_accuracy": 77.77777777777779,
+      "sample_count": 10
+    },
+    "final_price": 16.093139577569257,
+    "initial_price": 16.09,
+    "price_change": 0.019512601424843456,
+    "total_return": 0.00019512601424843457,
+    "sharpe_ratio": 2.7493830934288224,
+    "max_drawdown": 16.36363636363636,
+    "max_drawdown_info": {
+      "max_drawdown": -0.1636363636363636,
+      "max_drawdown_pct": 16.36363636363636,
+      "peak_index": 22,
+      "trough_index": 40
+    }
+  },
+  {
+    "stock_code": "sh.601399",
+    "stock_name": "国机重装",
+    "theme": "可控核聚变",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.025417607407585318,
+      "rmse": 0.02823666987699442,
+      "mape": 0.4922953124728126,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 5.132406856757236,
+    "initial_price": 5.18,
+    "price_change": -0.9187865490880971,
+    "total_return": -0.009187865490880971,
+    "sharpe_ratio": 3.1262434408030906,
+    "max_drawdown": 14.323607427055704,
+    "max_drawdown_info": {
+      "max_drawdown": -0.14323607427055704,
+      "max_drawdown_pct": 14.323607427055704,
+      "peak_index": 54,
+      "trough_index": 69
+    }
+  },
+  {
+    "stock_code": "sz.002371",
+    "stock_name": "北方华创",
+    "theme": "半导体设备",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 2.0104268592552215,
+      "rmse": 2.353680712189515,
+      "mape": 0.4441238036621855,
+      "direction_accuracy": 77.77777777777779,
+      "sample_count": 10
+    },
+    "final_price": 451.9932608463675,
+    "initial_price": 455.1,
+    "price_change": -0.6826497810662562,
+    "total_return": -0.006826497810662562,
+    "sharpe_ratio": 2.1112694851575218,
+    "max_drawdown": 16.024138230441952,
+    "max_drawdown_info": {
+      "max_drawdown": -0.16024138230441953,
+      "max_drawdown_pct": 16.024138230441952,
+      "peak_index": 29,
+      "trough_index": 65
+    }
+  },
+  {
+    "stock_code": "sh.601012",
+    "stock_name": "隆基绿能",
+    "theme": "光伏\"反内卷\"",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.10069792963890833,
+      "rmse": 0.1098546864305871,
+      "mape": 0.5566597602022726,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 18.109006938976183,
+    "initial_price": 18.19,
+    "price_change": -0.445261467970414,
+    "total_return": -0.00445261467970414,
+    "sharpe_ratio": 1.3011853499137243,
+    "max_drawdown": 21.57894736842106,
+    "max_drawdown_info": {
+      "max_drawdown": -0.2157894736842106,
+      "max_drawdown_pct": 21.57894736842106,
+      "peak_index": 56,
+      "trough_index": 79
+    }
+  },
+  {
+    "stock_code": "sh.600693",
+    "stock_name": "东百集团",
+    "theme": "消费复苏（事件驱动）",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.07443743329771273,
+      "rmse": 0.08628703312219174,
+      "mape": 0.5001308461098619,
+      "direction_accuracy": 44.44444444444444,
+      "sample_count": 10
+    },
+    "final_price": 14.882296790935442,
+    "initial_price": 14.9,
+    "price_change": -0.11881348365475555,
+    "total_return": -0.0011881348365475556,
+    "sharpe_ratio": 4.181205965578192,
+    "max_drawdown": 28.376068376068364,
+    "max_drawdown_info": {
+      "max_drawdown": -0.28376068376068364,
+      "max_drawdown_pct": 28.376068376068364,
+      "peak_index": 61,
+      "trough_index": 66
+    }
+  },
+  {
+    "stock_code": "sz.002706",
+    "stock_name": "良信股份",
+    "theme": "数据中心配电",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.02965796161960945,
+      "rmse": 0.04121287880107525,
+      "mape": 0.2984324768980247,
+      "direction_accuracy": 77.77777777777779,
+      "sample_count": 10
+    },
+    "final_price": 9.938215513283984,
+    "initial_price": 9.98,
+    "price_change": -0.4186822316234132,
+    "total_return": -0.004186822316234132,
+    "sharpe_ratio": -0.0172942840559922,
+    "max_drawdown": 26.774691358024693,
+    "max_drawdown_info": {
+      "max_drawdown": -0.26774691358024694,
+      "max_drawdown_pct": 26.774691358024693,
+      "peak_index": 55,
+      "trough_index": 79
+    }
+  },
+  {
+    "stock_code": "sh.688676",
+    "stock_name": "金盘科技",
+    "theme": "数据中心配电",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.4883223218998694,
+      "rmse": 0.5449714590786314,
+      "mape": 0.5886753561582115,
+      "direction_accuracy": 66.66666666666666,
+      "sample_count": 10
+    },
+    "final_price": 83.21275857411192,
+    "initial_price": 83.3,
+    "price_change": -0.10473160370717997,
+    "total_return": -0.0010473160370717998,
+    "sharpe_ratio": 2.513315188344619,
+    "max_drawdown": 21.89195053156868,
+    "max_drawdown_info": {
+      "max_drawdown": -0.21891950531568677,
+      "max_drawdown_pct": 21.89195053156868,
+      "peak_index": 55,
+      "trough_index": 66
+    }
+  },
+  {
+    "stock_code": "sz.002837",
+    "stock_name": "英维克",
+    "theme": "数据中心冷却",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.39946594986173095,
+      "rmse": 0.4761622287444017,
+      "mape": 0.5036646176306026,
+      "direction_accuracy": 33.33333333333333,
+      "sample_count": 10
+    },
+    "final_price": 79.38544511270888,
+    "initial_price": 78.87,
+    "price_change": 0.6535376096220044,
+    "total_return": 0.006535376096220044,
+    "sharpe_ratio": 1.623634667025309,
+    "max_drawdown": 22.373358348968104,
+    "max_drawdown_info": {
+      "max_drawdown": -0.22373358348968103,
+      "max_drawdown_pct": 22.373358348968104,
+      "peak_index": 30,
+      "trough_index": 57
+    }
+  },
+  {
+    "stock_code": "sz.300499",
+    "stock_name": "高澜股份",
+    "theme": "数据中心冷却",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.15547011480678066,
+      "rmse": 0.17431277097816988,
+      "mape": 0.562720479829682,
+      "direction_accuracy": 77.77777777777779,
+      "sample_count": 10
+    },
+    "final_price": 27.66218179919809,
+    "initial_price": 27.48,
+    "price_change": 0.6629614235738381,
+    "total_return": 0.006629614235738382,
+    "sharpe_ratio": 0.9065921284341463,
+    "max_drawdown": 26.45609968125181,
+    "max_drawdown_info": {
+      "max_drawdown": -0.2645609968125181,
+      "max_drawdown_pct": 26.45609968125181,
+      "peak_index": 25,
+      "trough_index": 65
+    }
+  },
+  {
+    "stock_code": "sz.300153",
+    "stock_name": "科泰电源",
+    "theme": "数据中心备用电源",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.15230474813320533,
+      "rmse": 0.16747466197733585,
+      "mape": 0.49494595342770625,
+      "direction_accuracy": 77.77777777777779,
+      "sample_count": 10
+    },
+    "final_price": 30.73355440279407,
+    "initial_price": 30.91,
+    "price_change": -0.5708366134129091,
+    "total_return": -0.005708366134129092,
+    "sharpe_ratio": -0.16473589811996583,
+    "max_drawdown": 41.482965931863724,
+    "max_drawdown_info": {
+      "max_drawdown": -0.41482965931863724,
+      "max_drawdown_pct": 41.482965931863724,
+      "peak_index": 4,
+      "trough_index": 65
+    }
+  },
+  {
+    "stock_code": "sz.002927",
+    "stock_name": "泰永长征",
+    "theme": "数据中心电源/线缆",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.11744909256806295,
+      "rmse": 0.12487375003174606,
+      "mape": 0.5839054595555443,
+      "direction_accuracy": 55.55555555555556,
+      "sample_count": 10
+    },
+    "final_price": 20.002496446096245,
+    "initial_price": 20.16,
+    "price_change": -0.7812676284908483,
+    "total_return": -0.007812676284908483,
+    "sharpe_ratio": 1.2058084751130398,
+    "max_drawdown": 22.797927461139896,
+    "max_drawdown_info": {
+      "max_drawdown": -0.22797927461139894,
+      "max_drawdown_pct": 22.797927461139896,
+      "peak_index": 63,
+      "trough_index": 66
+    }
+  },
+  {
+    "stock_code": "sz.001208",
+    "stock_name": "华菱线缆",
+    "theme": "数据中心线缆",
+    "status": "success",
+    "iterations": 10,
+    "metrics": {
+      "mae": 0.04403446799876463,
+      "rmse": 0.051213479326773455,
+      "mape": 0.268734063385422,
+      "direction_accuracy": 77.77777777777779,
+      "sample_count": 10
+    },
+    "final_price": 16.367730835125172,
+    "initial_price": 16.34,
+    "price_change": 0.16971135327523013,
+    "total_return": 0.0016971135327523014,
+    "sharpe_ratio": 1.8132011577200824,
+    "max_drawdown": 23.822525597269625,
+    "max_drawdown_info": {
+      "max_drawdown": -0.23822525597269625,
+      "max_drawdown_pct": 23.822525597269625,
+      "peak_index": 29,
+      "trough_index": 68
+    }
+  }
+]

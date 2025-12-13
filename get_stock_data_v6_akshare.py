@@ -8,7 +8,6 @@ import akshare as ak
 import pandas as pd
 import os
 from datetime import datetime
-
 # V6 股票列表
 stocks = [
     # === 原有股票 ===
@@ -32,6 +31,8 @@ stocks = [
      "category": "消费", "volatility": "中", "style": "平衡"},
     
     # === V6 新增ETF ===
+    {"code": "513130", "name": "恒生科技ETF", "market": "sh",
+     "category": "科技", "volatility": "高", "style": "激进"},
     {"code": "513180", "name": "恒生科技", "market": "sh",
      "category": "科技", "volatility": "高", "style": "激进"},
     {"code": "512480", "name": "半导体ETF", "market": "sh",
@@ -57,7 +58,7 @@ print("V6 数据获取（使用AkShare）")
 print("="*70)
 print(f"\n总共 {len(stocks)} 只标的")
 print("  - 原有: 8只")
-print("  - 新增: {len(stocks) - 8}只\n")
+print(f"  - 新增: {len(stocks) - 8}只\n")
 
 # 按分类统计
 from collections import Counter

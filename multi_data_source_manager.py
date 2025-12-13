@@ -73,9 +73,13 @@ class MultiDataSourceManager:
         else:
             self.sources = [s for s in sources if s in self.available_sources]
         
-        # 设置优先级（默认：tushare > akshare > baostock）
+        # 设置优先级（默认：stockapi > tushare > akshare > baostock）
         if priority is None:
-            self.priority = ['tushare', 'akshare', 'baostock']
+            # V14: 如果StockAPI可用，设置为最高优先级
+            if 'stockapi' in self.available_sources:
+                self.priority = ['stockapi', 'tushare', 'akshare', 'baostock']
+            else:
+                self.priority = ['tushare', 'akshare', 'baostock']
         else:
             self.priority = [p for p in priority if p in self.available_sources]
         
@@ -93,6 +97,16 @@ class MultiDataSourceManager:
     def _detect_available_sources(self) -> List[str]:
         """检测可用的数据源"""
         available = []
+        
+        # V14: 检测 StockAPI
+        try:
+            import requests
+            # 检查是否有StockAPI配置
+            stockapi_key = os.getenv('STOCKAPI_API_KEY', '')
+            if stockapi_key:
+                available.append('stockapi')
+        except ImportError:
+            pass
         
         # 检测 Tushare
         try:
@@ -150,7 +164,10 @@ class MultiDataSourceManager:
                 num = code
         
         # 转换为目标格式
-        if target_source == 'tushare':
+        if target_source == 'stockapi':
+            # V14: StockAPI格式，如SH600036或SZ002241
+            return f"{market.upper()}{num}"
+        elif target_source == 'tushare':
             return f"{num}.{market.upper()}"
         elif target_source == 'akshare':
             return num
@@ -383,6 +400,98 @@ class MultiDataSourceManager:
             warnings.warn(f"baostock 获取数据失败: {e}")
             return None
     
+    def _fetch_from_stockapi(self, days: int = 7) -> Optional[pd.DataFrame]:
+        """V14: 从 StockAPI 获取数据"""
+        try:
+            import requests
+            
+            # 获取StockAPI配置
+            api_key = os.getenv('STOCKAPI_API_KEY', '')
+            base_url = os.getenv('STOCKAPI_BASE_URL', 'https://api.stockapi.com')
+            
+            if not api_key:
+                return None
+            
+            # 转换股票代码
+            stock_code = self._convert_stock_code(self.stock_code, 'stockapi')
+            
+            # 计算日期范围
+            today = datetime.date.today()
+            start_date = (today - datetime.timedelta(days=days)).strftime('%Y%m%d')
+            end_date = today.strftime('%Y%m%d')
+            
+            # 构建请求URL（根据StockAPI的实际API格式调整）
+            # 这里使用通用的REST API格式
+            url = f"{base_url}/api/v1/stock/kline"
+            params = {
+                'code': stock_code,
+                'start_date': start_date,
+                'end_date': end_date,
+                'period': '5min',  # 5分钟K线
+                'api_key': api_key
+            }
+            
+            # 发送请求
+            headers = {
+                'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36',
+                'Accept': 'application/json'
+            }
+            
+            response = requests.get(url, params=params, headers=headers, timeout=self.timeout)
+            
+            if response.status_code == 200:
+                data = response.json()
+                
+                # 解析响应数据（根据StockAPI的实际响应格式调整）
+                if 'data' in data and len(data['data']) > 0:
+                    # 假设返回格式为列表，每个元素包含时间、收盘价、成交量等
+                    records = data['data']
+                    
+                    # 转换为DataFrame
+                    df_data = []
+                    for record in records:
+                        # 根据实际API响应格式解析字段
+                        # 这里使用通用字段名，需要根据实际API调整
+                        time_str = record.get('time') or record.get('datetime') or record.get('date')
+                        close = float(record.get('close') or record.get('price') or 0)
+                        volume = float(record.get('volume') or record.get('vol') or 0)
+                        
+                        if time_str and close > 0:
+                            df_data.append({
+                                'time': time_str,
+                                'close': close,
+                                'volume': volume
+                            })
+                    
+                    if len(df_data) > 0:
+                        df = pd.DataFrame(df_data)
+                        
+                        # 标准化时间格式
+                        if 'time' in df.columns:
+                            try:
+                                df['time'] = pd.to_datetime(df['time']).dt.strftime('%Y%m%d%H%M%S')
+                                df['date'] = pd.to_datetime(df['time']).dt.strftime('%Y-%m-%d')
+                            except:
+                                df['date'] = datetime.date.today().strftime('%Y-%m-%d')
+                                df['time'] = df['date'].str.replace('-', '') + '15000000'
+                        
+                        # 确保有必要的列
+                        if 'close' not in df.columns:
+                            return None
+                        if 'volume' not in df.columns:
+                            df['volume'] = 0
+                        
+                        # 按时间排序
+                        df = df.sort_values('time').reset_index(drop=True)
+                        
+                        return df[['date', 'time', 'close', 'volume']]
+            
+            return None
+            
+        except Exception as e:
+            warnings.warn(f"StockAPI 获取数据失败: {e}")
+            return None
+    
     def fetch_data(self, days: int = 7, use_cache: bool = True) -> Tuple[Optional[pd.DataFrame], str]:
         """
         从多个数据源获取数据（按优先级尝试）
@@ -401,7 +510,9 @@ class MultiDataSourceManager:
             
             try:
                 df = None
-                if source == 'tushare':
+                if source == 'stockapi':
+                    df = self._fetch_from_stockapi(days)
+                elif source == 'tushare':
                     df = self._fetch_from_tushare(days)
                 elif source == 'akshare':
                     df = self._fetch_from_akshare(days)
@@ -442,7 +553,9 @@ class MultiDataSourceManager:
         for source in self.sources:
             try:
                 df = None
-                if source == 'tushare':
+                if source == 'stockapi':
+                    df = self._fetch_from_stockapi(days)
+                elif source == 'tushare':
                     df = self._fetch_from_tushare(days)
                 elif source == 'akshare':
                     df = self._fetch_from_akshare(days)

@@ -14,7 +14,8 @@ V12新增优化：
 - 预测后处理优化（动态校正预测）
 
 设计理念：多模型协同工作，智能融合决策
-专用标的：立讯精密002475（消费电子板块）
+专用标的：立讯精密002475（电子元器件板块）
+基于V12宏达电子模型（v7_300726）运行
 """
 
 import os
@@ -46,6 +47,12 @@ TRANSFER_FEE_RATE = 0.00001  # 过户费率
 STAMP_DUTY_RATE = 0.001  # 印花税率（仅卖出）
 SLIPPAGE_RATE = 0.0005  # 滑点率
 
+def round_to_lot(shares):
+    """将股数向下取整为100股的整数倍（按手交易）"""
+    if shares <= 0:
+        return 0
+    return int(shares // 100) * 100
+
 def calc_buy_trade(current_price, buy_percentage, current_balance):
     """模拟买入操作，考虑滑点、手续费、过户费"""
     if current_balance <= 0 or buy_percentage <= 0:
@@ -57,7 +64,10 @@ def calc_buy_trade(current_price, buy_percentage, current_balance):
     if buy_amount < 100:
         return 0.0, 0.0, 0.0, adjusted_price
     
-    shares_bought = buy_amount / adjusted_price if adjusted_price > 0 else 0.0
+    shares_bought = round_to_lot(buy_amount / adjusted_price) if adjusted_price > 0 else 0
+    if shares_bought <= 0:
+        return 0.0, 0.0, 0.0, adjusted_price
+    
     trade_amount = shares_bought * adjusted_price
     
     commission = max(MIN_COMMISSION, trade_amount * COMMISSION_RATE)
@@ -66,8 +76,12 @@ def calc_buy_trade(current_price, buy_percentage, current_balance):
     total_cost = trade_amount + total_fee
     
     if total_cost > current_balance:
-        trade_amount = max(0.0, current_balance - MIN_COMMISSION)
-        shares_bought = trade_amount / adjusted_price if adjusted_price > 0 else 0.0
+        # 重新按资金上限计算可买股数（向下取整到100股）
+        max_trade_amount = max(0.0, current_balance - MIN_COMMISSION)
+        shares_bought = round_to_lot(max_trade_amount / adjusted_price) if adjusted_price > 0 else 0
+        if shares_bought <= 0:
+            return 0.0, 0.0, 0.0, adjusted_price
+        trade_amount = shares_bought * adjusted_price
         commission = max(MIN_COMMISSION, trade_amount * COMMISSION_RATE)
         transfer_fee = trade_amount * TRANSFER_FEE_RATE
         total_fee = commission + transfer_fee
@@ -81,7 +95,9 @@ def calc_sell_trade(current_price, sell_percentage, shares_held):
         return 0.0, 0.0, 0.0, current_price
     
     adjusted_price = current_price * (1 - SLIPPAGE_RATE)
-    shares_sold = shares_held * sell_percentage
+    shares_sold = round_to_lot(shares_held * sell_percentage)
+    if shares_sold <= 0:
+        return 0.0, 0.0, 0.0, adjusted_price
     trade_amount = shares_sold * adjusted_price
     
     if trade_amount <= 0:
@@ -217,9 +233,11 @@ def get_stock_name(code):
     """根据股票代码获取股票名称"""
     stock_name_map = {
         'sz.002025': '航天电器',
+        'sz.002241': '歌尔股份',
+        'sz.002475': '立讯精密',
         'sh.603267': '鸿远电子',
         'sz.300726': '宏达电子',
-        'sz.002475': '立讯精密',
+        'sz.300762': '上海瀚讯',
         'sz.301017': '漱玉平民',
         'sz.300749': '顶固集创',
         'sh.600730': '中国高科',
@@ -468,7 +486,7 @@ MODEL_WEIGHTS = {
 
 # 文件路径
 TRADE_LOG_FILE = "trade_log.csv"
-PORTFOLIO_STATE_FILE = "portfolio_state.json"
+PORTFOLIO_STATE_FILE = f"portfolio_state_{STOCK_CODE}.json"
 
 # V7持仓编辑器配置
 ENABLE_WEB_EDITOR = True          # 是否启用网页持仓编辑
@@ -650,9 +668,10 @@ ppo_model = None
 if PPO_AVAILABLE:
     try:
         # V12优化：优先使用对应股票的专用训练模型，如果不存在才使用通用模型
+        # 使用宏达电子300726的模型（v7_300726）
         possible_models = [
-            "ppo_stock_v7_002475.zip",  # 002475专用模型（优先）
-            "models_v7_002475/best/best_model.zip",  # 002475最佳模型（优先）
+            "ppo_stock_v7_300726.zip",  # 300726专用模型（优先，用于002475）
+            "models_v7_300726/best/best_model.zip",  # 300726最佳模型（优先，用于002475）
             MODEL_PATH,  # 用户指定的模型路径
             "ppo_stock_v7.zip",  # 通用模型（备用）
             "models_v7/best/best_model.zip"  # 通用最佳模型（备用）
@@ -668,8 +687,8 @@ if PPO_AVAILABLE:
         if loaded_model_path:
             MODEL_PATH = loaded_model_path
             ppo_model = PPO.load(MODEL_PATH)
-            if "002475" in MODEL_PATH:
-                print(f"✅ PPO模型加载成功: {MODEL_PATH} (立讯精密002475专用模型)")
+            if "300726" in MODEL_PATH:
+                print(f"✅ PPO模型加载成功: {MODEL_PATH} (使用宏达电子300726模型运行立讯精密002475)")
             else:
                 print(f"✅ PPO模型加载成功: {MODEL_PATH} (通用模型)")
         else:
@@ -1686,7 +1705,7 @@ def refresh_portfolio_from_file_if_changed(current_balance, shares_held, last_pr
                 elif actual_buy_price_val and isinstance(actual_buy_price_val, (int, float)) and actual_buy_price_val > 0:
                     cost_price = float(actual_buy_price_val)
                 else:
-                    cost_price = None  # 不使用 last_price 作为回退，仅在计算持仓价值时可能需要
+                    cost_price = None  # 不使用 last_price 作为回退
                 
                 if initial_balance and initial_balance > 0 and cost_price and cost_price > 0:
                     position_value = shares_held * cost_price
@@ -2162,7 +2181,6 @@ current_balance = 50000.0
 shares_held = 0.0
 last_price = 0.0
 initial_balance = 50000.0
-cost_price = None  # V12优化：初始化成本价变量
 last_action = None
 
 # 模型训练状态
@@ -2179,7 +2197,6 @@ if ENABLE_BACKTEST:
 
 # 加载持仓状态
 portfolio_state = load_portfolio_state()
-cost_price = None  # V12优化：初始化成本价变量
 if portfolio_state:
     if portfolio_state.get('stock_code') == STOCK_CODE:
         current_balance = portfolio_state.get('current_balance', 50000.0)
@@ -2998,10 +3015,10 @@ while True:
                     # 如果资金不足，调整买入数量
                     if total_cost > current_balance:
                         available_amount = max(0, current_balance - MIN_COMMISSION)
-                        buy_shares = available_amount / adjusted_buy_price if adjusted_buy_price > 0 else 0
+                        buy_shares = round_to_lot(available_amount / adjusted_buy_price) if adjusted_buy_price > 0 else 0
                         actual_buy_amount = buy_shares * adjusted_buy_price
-                        commission = max(MIN_COMMISSION, actual_buy_amount * COMMISSION_RATE)
-                        transfer_fee = actual_buy_amount * TRANSFER_FEE_RATE
+                        commission = max(MIN_COMMISSION, actual_buy_amount * COMMISSION_RATE) if buy_shares > 0 else 0.0
+                        transfer_fee = actual_buy_amount * TRANSFER_FEE_RATE if buy_shares > 0 else 0.0
                         total_fee = commission + transfer_fee
                         total_cost = actual_buy_amount + total_fee
                     
@@ -3026,7 +3043,7 @@ while True:
                 else:
                     sell_pct = 0
                 
-                sell_shares = shares_held * sell_pct if sell_pct > 0 else 0
+                sell_shares = round_to_lot(shares_held * sell_pct) if sell_pct > 0 else 0
                 
                 if sell_shares > 0:
                     # 计算实际卖出金额（考虑滑点、手续费和印花税）
@@ -3121,6 +3138,13 @@ while True:
                         if abs(price_diff_pct) <= 5.0 or (price_diff < 0 and price_diff_pct >= -3.0):
                             # 简化显示格式：一行显示关键信息
                             print(f"         {status} {position_pct:3d}%仓位 ({label:4s}): {gradient_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 买入{int(shares_bought):4d}股 ({buy_pct*100:3.0f}%资金, 成本{total_cost:.2f}元)")
+            
+            # 显示0%仓位参考价（空仓提示）
+            zero_price = suggestions['0%']
+            if zero_price:
+                price_diff = zero_price - current_price
+                price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
+                print(f"         ⚪ 0%仓位 (空仓): {zero_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 不买入，保持空仓")
                         
             # 显示梯度买入策略说明
             print(f"\n         💡 梯度买入策略说明:")
@@ -3137,27 +3161,51 @@ while True:
                     # 优先使用 cost_price，如果没有则使用 actual_buy_price，都不存在则为 None（不使用 last_price）
                     cost_price_val = portfolio_state_for_cost.get('cost_price')
                     actual_buy_price_val = portfolio_state_for_cost.get('actual_buy_price')
-                    last_price_val = portfolio_state_for_cost.get('last_price')
                     
-                    # V12调试：确保不会错误使用last_price作为成本价
                     # 确保值存在且大于0
-                    if cost_price_val is not None and isinstance(cost_price_val, (int, float)) and cost_price_val > 0:
+                    if cost_price_val and isinstance(cost_price_val, (int, float)) and cost_price_val > 0:
                         current_cost_price = float(cost_price_val)
-                    elif actual_buy_price_val is not None and isinstance(actual_buy_price_val, (int, float)) and actual_buy_price_val > 0:
+                    elif actual_buy_price_val and isinstance(actual_buy_price_val, (int, float)) and actual_buy_price_val > 0:
                         current_cost_price = float(actual_buy_price_val)
                     else:
-                        current_cost_price = None  # 明确不使用last_price作为回退
-                        
-                    # V12调试：如果成本价等于last_price，可能是数据错误，给出警告
-                    if current_cost_price is not None and last_price_val is not None and abs(current_cost_price - float(last_price_val)) < 0.01:
-                        # 成本价不应该等于last_price（除非刚买入），这可能表示数据有问题
-                        pass  # 这里可以添加日志，但不影响功能
+                        current_cost_price = None
                 
                 print(f"      🔴 梯度卖出建议（价格越高，卖出越多）:")
+                if current_cost_price:
+                    print(f"         💰 当前持仓成本价: {current_cost_price:.4f}元")
                 
-                # 计算价格区间
-                min_price = suggestions['100%']
-                max_price = suggestions['0%']
+                # V12优化：为卖出建议计算独立的价格区间，基于预测价格向上扩展，实现利润最大化
+                # 获取预测价格和波动率
+                predicted_price = price_suggestions.get('predicted_price', current_price)
+                volatility_pct = price_suggestions.get('volatility_pct', 2.0)
+                
+                # 卖出价格区间：从当前价格到预测价格+波动率的倍数（向上扩展）
+                # 如果预测价格上涨，卖出区间应该向上扩展更多
+                price_change_pct = price_suggestions.get('price_change_pct', 0.0)
+                
+                # 计算卖出价格区间的上限：基于预测价格和波动率
+                # 如果预测上涨，卖出上限 = 预测价格 + 波动率 * 倍数（例如2-3倍）
+                # 如果预测下跌，卖出上限 = 当前价格 + 波动率 * 倍数（保守卖出）
+                if price_change_pct > 0:
+                    # 预测上涨：卖出上限应该更高，以最大化利润
+                    sell_max_price = predicted_price + predicted_price * volatility_pct / 100 * max(2.0, min(4.0, abs(price_change_pct) / 2.0))
+                else:
+                    # 预测下跌：卖出上限基于当前价格，保守卖出
+                    sell_max_price = current_price + current_price * volatility_pct / 100 * 2.0
+                
+                # 卖出价格区间的下限：从当前价格或买入建议的50%仓位价格开始
+                sell_min_price = max(current_price, suggestions.get('50%', current_price))
+                
+                # 确保卖出价格区间足够大（至少5%的价格差，提供更好的区分度）
+                sell_price_range = sell_max_price - sell_min_price
+                min_sell_range = current_price * 0.05  # 至少5%的价格差
+                if sell_price_range < min_sell_range:
+                    # 如果区间太小，向上扩展上限
+                    sell_max_price = sell_min_price + min_sell_range
+                
+                # 使用卖出专用的价格区间
+                min_price = sell_min_price
+                max_price = sell_max_price
                 price_range = max_price - min_price
                 
                 # 定义梯度卖出档位（12个档位，从0%到90%仓位）
@@ -3190,6 +3238,13 @@ while True:
                         shares_sold, net_proceeds, total_fee, adj_price = calc_sell_trade(gradient_price, sell_pct, shares_held)
                         
                         if shares_sold > 0:
+                            # V12优化：计算真实盈亏（利润）= (实际成交价 - 成本价) * 卖出数量 - 手续费
+                            # 注意：使用成本价而不是最近成交价来计算盈亏
+                            profit_loss = None
+                            if current_cost_price and current_cost_price > 0:
+                                # 盈亏 = (卖出价格 - 成本价) × 股数 - 手续费
+                                profit_loss = (adj_price - current_cost_price) * shares_sold - total_fee
+                            
                             # 判断操作状态
                             if abs(price_diff_pct) <= 1.0:  # 价格差异在1%以内，可以卖出
                                 status = "✅ 可卖出"
@@ -3202,8 +3257,23 @@ while True:
                             
                             # 只显示价格差异在合理范围内的建议
                             if abs(price_diff_pct) <= 5.0 or (price_diff > 0 and price_diff_pct <= 3.0):
+                                # V12优化：只显示真实盈亏（基于成本价计算），移除净收益以避免歧义
                                 sell_pct_of_holding = (shares_sold / shares_held * 100) if shares_held > 0 else 0
                                 print(f"         {status} {target_position_pct:3d}%仓位 ({label:4s}): {gradient_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 卖出{int(shares_sold):4d}股(占持仓{sell_pct_of_holding:.0f}%, 当前持仓{shares_held:.0f}股) → 保留{int(shares_held - shares_sold):4d}股")
+                
+                # 显示0%仓位参考价（全部卖出提示）- 使用卖出专用的价格区间上限
+                zero_price = max_price  # 使用卖出价格区间的上限
+                if zero_price:
+                    price_diff = zero_price - current_price
+                    price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
+                    # 计算全部卖出的收益
+                    shares_sold_all, net_proceeds_all, total_fee_all, adj_price_all = calc_sell_trade(zero_price, 1.0, shares_held)
+                    if shares_sold_all > 0:
+                        profit_loss_all = None
+                        if current_cost_price and current_cost_price > 0:
+                            profit_loss_all = (adj_price_all - current_cost_price) * shares_sold_all - total_fee_all
+                        
+                        print(f"         🔥 0%仓位 (全卖): {zero_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 卖出全部{int(shares_sold_all):4d}股 → 保留 0股")
                 
                 # 显示梯度卖出策略说明
                 print(f"\n         💡 梯度卖出策略说明:")

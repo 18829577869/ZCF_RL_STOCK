@@ -1,0 +1,100 @@
+[
+  {
+    "stock_code": "sh.600343",
+    "stock_name": "航天动力",
+    "theme": "商业航天",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sh.603601",
+    "stock_name": "再升科技",
+    "theme": "商业航天",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sh.600776",
+    "stock_name": "东方通信",
+    "theme": "商业航天",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sh.601399",
+    "stock_name": "国机重装",
+    "theme": "可控核聚变",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sz.002371",
+    "stock_name": "北方华创",
+    "theme": "半导体设备",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sh.601012",
+    "stock_name": "隆基绿能",
+    "theme": "光伏\"反内卷\"",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sh.600693",
+    "stock_name": "东百集团",
+    "theme": "消费复苏（事件驱动）",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sz.002706",
+    "stock_name": "良信股份",
+    "theme": "数据中心配电",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sh.688676",
+    "stock_name": "金盘科技",
+    "theme": "数据中心配电",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sz.002837",
+    "stock_name": "英维克",
+    "theme": "数据中心冷却",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sz.300499",
+    "stock_name": "高澜股份",
+    "theme": "数据中心冷却",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sz.300153",
+    "stock_name": "科泰电源",
+    "theme": "数据中心备用电源",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sz.002927",
+    "stock_name": "泰永长征",
+    "theme": "数据中心电源/线缆",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  },
+  {
+    "stock_code": "sz.001208",
+    "stock_name": "华菱线缆",
+    "theme": "数据中心线缆",
+    "status": "failed",
+    "error": "数据不足（81条）"
+  }
+]
