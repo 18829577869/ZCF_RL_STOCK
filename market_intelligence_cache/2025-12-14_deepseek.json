@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": 0.2,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.3,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.0,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "预计2025年底经济处于温和复苏通道，政策托底但效力边际递减，市场情绪谨慎；地缘摩擦与全球流动性收紧构成主要外部风险，导致市场波动性上升并与国际股市联动增强。",
+  "date": "2025-12-14",
+  "source": "deepseek",
+  "timestamp": "2025-12-14T15:53:15.714194"
+}

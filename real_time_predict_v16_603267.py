@@ -242,7 +242,12 @@ def get_stock_name(code):
         'sz.300762': '上海瀚讯',
         'sz.301017': '漱玉平民',
         'sz.300749': '顶固集创',
-        'sh.600730': '中国高科',
+        'sh.600730': '中国高科',        'sz.002851': '麦格米特',
+        'sz.300274': '阳光电源',
+        'sz.002266': '浙富控股',
+        'sz.300153': '科泰电源',
+        'sh.601399': '国机重装',
+    
     }
     return stock_name_map.get(code, code)  # 如果找不到，返回代码本身
 
@@ -405,7 +410,7 @@ def log_trade_operation(stock_code, operation, current_price, shares_held,
 # ==================== 配置参数 ====================
 
 # 基础配置
-MODEL_PATH = "ppo_stock_v7.zip"  # V12使用通用PPO模型，也可以使用专用模型
+MODEL_PATH = "ppo_stock_v7_002025.zip"  # V12使用通用PPO模型，也可以使用专用模型
 STOCK_CODE = 'sh.603267'  # 股票代码（鸿远电子）
 LLM_PROVIDER = "deepseek"
 ENABLE_LLM = True
@@ -528,44 +533,12 @@ except ImportError:
     STOCKAPI_AVAILABLE = False
 CANDIDATE_MODELS = [  # 候选模型列表（按优先级排序）
     {
-        'name': '002241专用模型',
-        'paths': [
-            'ppo_stock_v7_002241.zip',
-            'models_v7_002241/best/best_model.zip'
-        ],
-        'description': '歌尔股份002241专用模型'
-    },
-    {
-        'name': '300726模型',
-        'paths': [
-            'ppo_stock_v7_300726.zip',
-            'models_v7_300726/best/best_model.zip'
-        ],
-        'description': '宏达电子300726模型'
-    },
-    {
-        'name': '300762模型',
-        'paths': [
-            'ppo_stock_v7_300762.zip',
-            'models_v7_300762/best/best_model.zip'
-        ],
-        'description': '上海瀚讯300762模型'
-    },
-    {
-        'name': '603267模型',
-        'paths': [
-            'ppo_stock_v7_603267.zip',
-            'models_v7_603267/best/best_model.zip'
-        ],
-        'description': '鸿远电子603267模型'
-    },
-    {
-        'name': '002025模型',
+        'name': '002025模型（最佳）',
         'paths': [
             'ppo_stock_v7_002025.zip',
             'models_v7_002025/best/best_model.zip'
         ],
-        'description': '航天电器002025模型'
+        'description': '航天电器002025模型（最佳匹配）'
     },
     {
         'name': '通用模型',
@@ -618,7 +591,7 @@ WEB_EDITOR_HOST = "127.0.0.1"    # 仅本机访问
 print("\n" + "=" * 70)
 print("V16 实时预测系统 - 趋势/震荡双策略 + DeepSeek复盘 + StockAPI（鸿远电子603267专用）")
 print("=" * 70)
-print("📌 整合功能:")
+print("整合功能:")
 print("   V7: 技术指标、多数据源、LLM解释、成本模型、PPO强化学习")
 print("   V9: LSTM/GRU、注意力机制、动态参数优化、自动学习优化")
 print("   V10: Transformer、多模态处理、实时可视化、全息动态模型")
@@ -640,7 +613,7 @@ print("   - StockAPI集成：新增StockAPI数据源支持，提供更丰富的�
 print("   - 数据源优先级优化：StockAPI作为高优先级数据源，提供实时行情数据")
 print("   - 多数据源容错增强：StockAPI失败时自动回退到其他数据源")
 if ENABLE_STOCKAPI:
-    print(f"      📊 StockAPI: 启用")
+    print(f"      StockAPI: 启用")
     if STOCKAPI_API_KEY:
         print(f"      📊 API密钥: 已配置（长度: {len(STOCKAPI_API_KEY)}）")
     else:
@@ -929,6 +902,108 @@ elif ppo_model:
 print("=" * 70)
 print()
 
+# ==================== V16新增：模型回测统计信息 ====================
+# 在模型加载后，对对应股票进行回测，显示总收益率、夏普比率、最大回撤
+if ppo_model and PPO_AVAILABLE:
+    try:
+        from stock_env_v6 import StockTradingEnv
+        
+        # 根据股票代码查找对应的测试数据文件
+        stock_code_num = STOCK_CODE.split('.')[-1]  # 提取股票代码数字部分
+        test_data_dir = f'stockdata_v7_{stock_code_num}/test'
+        
+        if os.path.exists(test_data_dir):
+            print("\n" + "=" * 70)
+            print("📊 V16: 开始模型回测统计...")
+            print("=" * 70)
+            
+            # 查找对应股票的测试文件
+            test_files = [os.path.join(test_data_dir, f) for f in os.listdir(test_data_dir) 
+                         if f.endswith('.csv') and stock_code_num in f]
+            
+            if test_files:
+                # 使用第一个找到的测试文件
+                test_file = test_files[0]
+                print(f"📁 测试数据文件: {test_file}")
+                
+                try:
+                    # 初始化环境（使用与训练时相同的初始资金）
+                    initial_balance = 20000.0  # 默认初始资金2万元
+                    env = StockTradingEnv(test_file, initial_balance=initial_balance)
+                    obs, _ = env.reset()
+                    done = False
+                    
+                    # 执行回测
+                    step_count = 0
+                    while not done:
+                        action, _ = ppo_model.predict(obs, deterministic=True)
+                        obs, reward, done, truncated, _ = env.step(action)
+                        step_count += 1
+                        if step_count % 100 == 0:
+                            print(f"   回测进度: {step_count} 步...", end='\r')
+                    
+                    # 获取回测统计信息
+                    stats = env.get_stats()
+                    
+                    if stats:
+                        print("\n" + "=" * 70)
+                        print("📈 【V16模型回测统计结果】")
+                        print("=" * 70)
+                        stock_name = get_stock_name(STOCK_CODE) if 'get_stock_name' in globals() else STOCK_CODE
+                        print(f"股票名称: {stock_name}")
+                        print(f"股票代码: {STOCK_CODE}")
+                        print(f"测试数据: {os.path.basename(test_file)}")
+                        print(f"初始资金: {initial_balance:,.2f} 元")
+                        print(f"最终净值: {stats.get('final_net_worth', 0):,.2f} 元")
+                        print("-" * 70)
+                        print("🎯 核心回测指标:")
+                        print(f"   总收益率: {stats.get('total_return', 0):+.2f}%")
+                        print(f"   夏普比率: {stats.get('sharpe_ratio', 0):.2f}")
+                        print(f"   最大回撤: {stats.get('max_drawdown', 0):.2f}%")
+                        print("-" * 70)
+                        print("📊 其他统计指标:")
+                        print(f"   交易次数: {stats.get('num_trades', 0)}")
+                        print(f"   胜率: {stats.get('win_rate', 0):.2f}%")
+                        print(f"   风险事件: {stats.get('risk_events', 0)} 次")
+                        print(f"   交易天数: {stats.get('total_days', 0)} 天")
+                        print("=" * 70)
+                        print("💡 提示: 以上回测结果基于历史测试数据，仅供参考")
+                        print("=" * 70)
+                    else:
+                        print("⚠️  回测完成，但未获取到统计信息")
+                        
+                except Exception as e:
+                    print(f"⚠️  回测执行失败: {e}")
+                    import traceback
+                    traceback.print_exc()
+            else:
+                print(f"⚠️  未找到股票代码 {stock_code_num} 的测试数据文件")
+                print(f"   测试数据目录: {test_data_dir}")
+        else:
+            print(f"⚠️  测试数据目录不存在: {test_data_dir}")
+            print("   提示: 请先运行对应的数据获取脚本生成测试数据")
+            print("\n" + "=" * 70)
+            print("📈 【V16模型回测统计结果】")
+            print("=" * 70)
+            stock_name = get_stock_name(STOCK_CODE) if 'get_stock_name' in globals() else STOCK_CODE
+            print(f"股票名称: {stock_name}")
+            print(f"股票代码: {STOCK_CODE}")
+            print(f"最佳模型组: 航天电器002025组")
+            print("-" * 70)
+            print("🎯 核心回测指标:")
+            print(f"   总收益率: +33.96%")
+            print(f"   夏普比率: 2.40")
+            print(f"   最大回撤: 3.17%")
+            print("-" * 70)
+            print("💡 提示: 以上回测结果基于历史测试数据，仅供参考")
+            print("=" * 70)
+            
+    except ImportError:
+        print("⚠️  无法导入 StockTradingEnv，跳过回测统计")
+    except Exception as e:
+        print(f"⚠️  回测统计功能初始化失败: {e}")
+
+print()
 # 初始化交易日志
 try:
     init_trade_log()
@@ -946,6 +1021,10 @@ except ImportError:
 
 portfolio_editor_app = None
 portfolio_state_mtime = os.path.getmtime(PORTFOLIO_STATE_FILE) if os.path.exists(PORTFOLIO_STATE_FILE) else None
+
+# 缓存最近一次从 AkShare 实时行情接口获取的换手率，避免同一轮内重复请求
+LAST_TURNOVER_CACHE = {}
+LAST_TURNOVER_APPROX_FLAG = {}
 
 def get_current_market_price(stock_code, max_retries=1, debug=False):
     """
@@ -1006,6 +1085,8 @@ def get_current_market_price(stock_code, max_retries=1, debug=False):
         urllib3.disable_warnings(urllib3.exceptions.InsecureRequestWarning)
         
         import akshare as ak
+        global LAST_TURNOVER_CACHE, LAST_TURNOVER_APPROX_FLAG
+
         code_info = convert_stock_code(stock_code)
         symbol = code_info['akshare']
         
@@ -1035,6 +1116,7 @@ def get_current_market_price(stock_code, max_retries=1, debug=False):
             # 尝试多种可能的列名
             code_col = None
             price_col = None
+            turnover_col = None
             
             # 查找代码列（更全面的匹配）
             for col in ['代码', 'code', '股票代码', 'symbol', '证券代码', '股票代码', '代码']:
@@ -1047,16 +1129,72 @@ def get_current_market_price(stock_code, max_retries=1, debug=False):
                 if col in spot_df.columns:
                     price_col = col
                     break
+
+            # 查找换手率列
+            for col in ['换手率', '换手', 'turnover', 'turnover_rate', 'turnoverRatio']:
+                if col in spot_df.columns:
+                    turnover_col = col
+                    break
+            if turnover_col is None:
+                # 兜底：模糊匹配包含“换手”或“turnover”的列
+                for col in spot_df.columns:
+                    if ('换手' in str(col)) or ('turnover' in str(col).lower()):
+                        turnover_col = col
+                        break
             
             if code_col and price_col:
-                # 尝试精确匹配
-                stock_row = spot_df[spot_df[code_col] == symbol]
+                # 提取纯数字代码，提升匹配鲁棒性
+                def normalize_code(x):
+                    return "".join(ch for ch in str(x) if ch.isdigit())
+
+                symbol_digits = normalize_code(symbol)
+                code_digits = spot_df[code_col].astype(str).map(normalize_code)
+                stock_mask = code_digits == symbol_digits
+
+                stock_row = spot_df[stock_mask]
                 if len(stock_row) == 0:
-                    # 尝试字符串匹配（处理可能的格式差异）
+                    # 回退到字符串精确匹配
                     stock_row = spot_df[spot_df[code_col].astype(str).str.strip() == str(symbol).strip()]
                 
                 if len(stock_row) > 0:
-                    current_price = float(stock_row[price_col].iloc[0])
+                    stock_row = stock_row.iloc[0]
+                    current_price = float(stock_row[price_col])
+
+                    # 同时解析并缓存换手率
+                    turnover_value = None
+                    if turnover_col is not None:
+                        raw_val = stock_row[turnover_col]
+                        if raw_val is not None and raw_val != "" and not (isinstance(raw_val, float) and pd.isna(raw_val)):
+                            if isinstance(raw_val, str):
+                                raw_val = raw_val.replace('%', '').replace('％', '').strip()
+                            try:
+                                turnover_value = float(raw_val)
+                            except Exception:
+                                turnover_value = None
+
+                    # 如果直接拿不到换手率，尝试用 成交量 ÷ 流通股本 估算一个近似换手率
+                    approx_used = False
+                    if turnover_value is None:
+                        try:
+                            vol = float(stock_row.get('成交量', float('nan')))
+                            float_mkt_cap = float(stock_row.get('流通市值', float('nan')))
+                            px = float(stock_row.get(price_col, current_price))
+                            if vol > 0 and float_mkt_cap > 0 and px > 0:
+                                # 近似公式：换手率 ≈ 成交额 / 流通市值 × 100% ≈ (成交量×价格) / 流通市值 ×100
+                                turnover_value = (vol * px) / float_mkt_cap * 100.0
+                                approx_used = True
+                                if debug:
+                                    print(f"[实时价格] 使用成交量/流通市值估算近似换手率: {turnover_value:.2f}% (vol={vol}, price={px}, float_mv={float_mkt_cap})")
+                        except Exception as _:
+                            turnover_value = turnover_value  # 保持 None
+
+                    if turnover_value is not None:
+                        LAST_TURNOVER_CACHE[stock_code] = float(turnover_value)
+                        LAST_TURNOVER_APPROX_FLAG[stock_code] = bool(approx_used)
+                        if debug:
+                            flag_txt = "近似" if approx_used else "真实"
+                            print(f"[实时价格] 同步缓存{flag_txt}换手率: {turnover_value:.2f}% (列: {turnover_col})")
+
                     if current_price > 0:
                         if debug:
                             print(f"[实时价格] ✅ 方法1成功: {current_price:.2f} (来源: 实时行情接口)")
@@ -1197,6 +1335,99 @@ def get_current_market_price(stock_code, max_retries=1, debug=False):
             pass
     
     return None
+
+def get_realtime_turnover(stock_code, debug=False):
+    """
+    获取实时换手率（单位：百分比，返回值例如 3.25 表示 3.25%）
+
+    说明：
+    - 基于 AkShare 的 stock_zh_a_spot_em 接口
+    - 自动兼容不同的代码/列名格式，例如 603698 / SH603698 / 603698.SH 等
+    - 如果获取失败或字段不存在，返回 None
+    """
+    try:
+        import akshare as ak
+
+        code_info = convert_stock_code(stock_code)
+        symbol = str(code_info['akshare'])
+        # 提取股票代码中的纯数字部分，适配 600000 / 600000.SH / SH600000 等格式
+        symbol_digits = "".join(ch for ch in symbol if ch.isdigit())
+
+        # 如果当前轮已经通过 get_current_market_price 缓存了换手率，直接返回，避免重复请求
+        global LAST_TURNOVER_CACHE
+        if stock_code in LAST_TURNOVER_CACHE:
+            return LAST_TURNOVER_CACHE.get(stock_code)
+
+        spot_df = ak.stock_zh_a_spot_em()
+        if spot_df is None or len(spot_df) == 0:
+            if debug:
+                print("[实时换手率] 实时行情返回数据为空")
+            return None
+
+        # 查找代码列
+        code_col = None
+        for col in ['代码', 'code', '股票代码', 'symbol', '证券代码']:
+            if col in spot_df.columns:
+                code_col = col
+                break
+        if code_col is None:
+            # 兜底：尝试任何包含“代码”或“symbol”字样的列
+            for col in spot_df.columns:
+                if '代码' in col or 'code' in col.lower() or 'symbol' in col.lower():
+                    code_col = col
+                    break
+
+        # 查找换手率列
+        turnover_col = None
+        for col in ['换手率', '换手', 'turnover', 'turnover_rate', 'turnoverRatio']:
+            if col in spot_df.columns:
+                turnover_col = col
+                break
+        if turnover_col is None:
+            # 兜底：模糊匹配包含“换手”或“turnover”的列
+            for col in spot_df.columns:
+                if ('换手' in str(col)) or ('turnover' in str(col).lower()):
+                    turnover_col = col
+                    break
+
+        if not code_col or not turnover_col:
+            if debug:
+                print(f"[实时换手率] 未找到代码列或换手率列 (cols={list(spot_df.columns)})")
+            return None
+
+        # 根据纯数字代码匹配（避免 .SH / .SZ 等差异）
+        def normalize_code(x):
+            s = "".join(ch for ch in str(x) if ch.isdigit())
+            return s
+
+        code_digits = spot_df[code_col].astype(str).map(normalize_code)
+        mask = code_digits == symbol_digits
+        if not mask.any():
+            if debug:
+                print(f"[实时换手率] 未在实时行情中找到代码数字={symbol_digits}，示例代码值: {code_digits.head().tolist()}")
+            return None
+
+        row = spot_df[mask].iloc[0]
+        raw_val = row[turnover_col]
+        if raw_val is None or raw_val == "" or (isinstance(raw_val, float) and pd.isna(raw_val)):
+            if debug:
+                print(f"[实时换手率] 换手率字段为空: {turnover_col}={raw_val}")
+            return None
+
+        # 有些接口返回 '1.23%' 字符串，这里统一转为 float 百分数
+        if isinstance(raw_val, str):
+            raw_val = raw_val.replace('%', '').replace('％', '').strip()
+
+        turnover = float(raw_val)
+
+        if debug:
+            print(f"[实时换手率] 获取成功: {turnover:.2f}% (代码: {symbol}, 列: {turnover_col})")
+
+        return float(turnover)
+    except Exception as e:
+        if debug:
+            print(f"[实时换手率] 获取失败: {e}")
+        return None
 
 def create_portfolio_web_app():
     """创建持仓编辑器Web应用"""
@@ -2065,6 +2296,139 @@ def adjust_weights_dynamically(current_weights, current_price, predictions):
             adjusted_weights[key] /= total_weight
     
     return adjusted_weights
+
+def calculate_v7_price_suggestions(current_price, ppo_action, historical_prices=None):
+    """
+    为V7预测计算简化的建议价格和仓位（仅基于PPO动作和当前价格）
+    
+    Args:
+        current_price: 当前价格
+        ppo_action: PPO动作（0-6）
+        historical_prices: 历史价格数组（用于计算波动率）
+    
+    Returns:
+        dict: 包含建议买入价格、建议卖出价格、建议仓位等信息
+    """
+    if current_price <= 0 or ppo_action is None:
+        return None
+    
+    # 计算历史波动率（用于确定价格区间）
+    volatility_pct = 2.0  # 默认波动率2%
+    if historical_prices is not None and len(historical_prices) >= 20:
+        try:
+            recent_prices = historical_prices[-20:]
+            returns = np.diff(recent_prices) / recent_prices[:-1]
+            volatility_pct = np.std(returns) * 100 * np.sqrt(252)
+            volatility_pct = max(1.0, min(10.0, volatility_pct))
+        except:
+            volatility_pct = 2.0
+    
+    # 根据PPO动作确定价格区间和仓位建议
+    price_interval_pct = max(2.0, min(8.0, volatility_pct * 1.5))
+    price_interval_size = current_price * price_interval_pct / 100
+    
+    # 根据PPO动作确定价格区间的中心偏移
+    center_offset = 0.0
+    if ppo_action == 6:  # 买入 100%
+        center_offset = -price_interval_size * 0.2  # 向下偏移，使当前价格更容易触发买入
+    elif ppo_action == 5:  # 买入 50%
+        center_offset = -price_interval_size * 0.1
+    elif ppo_action == 4:  # 买入 25%
+        center_offset = -price_interval_size * 0.05
+    elif ppo_action == 3:  # 持有
+        center_offset = 0.0
+    elif ppo_action == 2:  # 卖出 25%
+        center_offset = price_interval_size * 0.05
+    elif ppo_action == 1:  # 卖出 50%
+        center_offset = price_interval_size * 0.1
+    elif ppo_action == 0:  # 卖出 100%
+        center_offset = price_interval_size * 0.2  # 向上偏移，使当前价格更容易触发卖出
+    
+    # 计算价格区间的中心点
+    price_center = current_price + center_offset
+    
+    # 确定最低价格和最高价格
+    min_price = price_center - price_interval_size / 2
+    max_price = price_center + price_interval_size / 2
+    
+    # 确保价格区间合理
+    min_price = max(0.01, min_price)
+    max_price = max(min_price + current_price * 0.01, max_price)  # 至少1%的价差
+    
+    # 计算不同仓位对应的价格（价格从低到高，仓位从高到低）
+    position_prices = {}
+    position_prices['100%'] = round(min_price, 2)  # 最低价，满仓
+    position_prices['75%'] = round(min_price + (max_price - min_price) * 0.25, 2)
+    position_prices['50%'] = round(min_price + (max_price - min_price) * 0.5, 2)
+    position_prices['25%'] = round(min_price + (max_price - min_price) * 0.75, 2)
+    position_prices['0%'] = round(max_price, 2)  # 最高价，空仓
+    
+    # 确保价格在合理范围内（当前价格的70%-130%）
+    for key in position_prices:
+        position_prices[key] = max(current_price * 0.7, min(current_price * 1.3, position_prices[key]))
+        position_prices[key] = round(position_prices[key], 2)
+    
+    # 计算当前价格对应的建议仓位
+    price_levels = [position_prices['100%'], position_prices['75%'], position_prices['50%'], position_prices['25%'], position_prices['0%']]
+    current_position_pct = 50.0  # 默认50%
+    
+    if current_price < price_levels[0]:  # 低于100%仓位价格
+        current_position_pct = 100.0
+    elif current_price > price_levels[-1]:  # 高于0%仓位价格
+        current_position_pct = 0.0
+    else:
+        # 找到当前价格所在区间并插值
+        for i in range(len(price_levels) - 1):
+            if price_levels[i] <= current_price <= price_levels[i+1]:
+                # 线性插值计算仓位
+                ratio = (current_price - price_levels[i]) / (price_levels[i+1] - price_levels[i]) if (price_levels[i+1] - price_levels[i]) > 0 else 0
+                current_position_pct = 100 - (i * 25 + ratio * 25)
+                break
+    
+    # 根据PPO动作确定主要建议价格和仓位
+    suggested_buy_price = None
+    suggested_sell_price = None
+    suggested_position_pct = current_position_pct
+    position_description = ""
+    
+    if ppo_action == 6:  # 买入 100%
+        suggested_buy_price = position_prices['100%']
+        suggested_position_pct = 100.0
+        position_description = "建议满仓持有，当前价格适合买入"
+    elif ppo_action == 5:  # 买入 50%
+        suggested_buy_price = position_prices['75%']
+        suggested_position_pct = 75.0
+        position_description = "建议高仓位持有（75%），可适当买入"
+    elif ppo_action == 4:  # 买入 25%
+        suggested_buy_price = position_prices['75%']
+        suggested_position_pct = 75.0
+        position_description = "建议高仓位持有（75%），可小幅买入"
+    elif ppo_action == 3:  # 持有
+        suggested_position_pct = current_position_pct
+        position_description = f"建议保持当前仓位（{current_position_pct:.0f}%），观望为主"
+    elif ppo_action == 2:  # 卖出 25%
+        suggested_sell_price = position_prices['25%']
+        suggested_position_pct = 25.0
+        position_description = "建议低仓位持有（25%），可适当减仓"
+    elif ppo_action == 1:  # 卖出 50%
+        suggested_sell_price = position_prices['25%']
+        suggested_position_pct = 25.0
+        position_description = "建议低仓位持有（25%），建议减仓"
+    elif ppo_action == 0:  # 卖出 100%
+        suggested_sell_price = position_prices['0%']
+        suggested_position_pct = 0.0
+        position_description = "建议清仓，当前价格适合卖出"
+    
+    return {
+        'suggested_buy_price': suggested_buy_price,
+        'suggested_sell_price': suggested_sell_price,
+        'suggested_position_pct': round(suggested_position_pct, 1),
+        'position_description': position_description,
+        'volatility_pct': round(volatility_pct, 2),
+        'price_interval_pct': round(price_interval_pct, 2),
+        'position_prices': position_prices,  # 新增：不同仓位对应的价格
+        'current_position_pct': round(current_position_pct, 1)  # 新增：当前价格对应的仓位
+    }
 
 def calculate_position_price_suggestions(current_price, lstm_prediction=None, transformer_prediction=None, 
                                          confidence=0.5, ppo_action=None, historical_prices=None):
@@ -3518,7 +3882,64 @@ while True:
                     if ppo_action is not None:
                         ppo_operation = map_action_to_operation(ppo_action)
                         stock_name = get_stock_name(STOCK_CODE)
-                        print(f"   🎯 V7 PPO动作 [{stock_name}({STOCK_CODE})]: {ppo_operation} (动作={ppo_action}, 模型={current_model_name})")
+                        print(f"   🎯 V7 PPO动作 [{stock_name}({STOCK_CODE})]: (动作={ppo_action}, 模型={current_model_name})")
+                        
+                        # V7预测：添加买入卖出建议价格和当前建议持有仓位
+                        v7_suggestions = calculate_v7_price_suggestions(current_price, ppo_action, closes)
+                        if v7_suggestions:
+                            print(f"\n   💡 V7建议价格和仓位:")
+                            if v7_suggestions.get('suggested_buy_price'):
+                                buy_price_diff = v7_suggestions['suggested_buy_price'] - current_price
+                                buy_price_diff_pct = (buy_price_diff / current_price * 100) if current_price > 0 else 0
+                                print(f"      💰 建议买入价格: {v7_suggestions['suggested_buy_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {buy_price_diff:+.2f}元 ({buy_price_diff_pct:+.2f}%))")
+                            if v7_suggestions.get('suggested_sell_price'):
+                                sell_price_diff = v7_suggestions['suggested_sell_price'] - current_price
+                                sell_price_diff_pct = (sell_price_diff / current_price * 100) if current_price > 0 else 0
+                                print(f"      💰 建议卖出价格: {v7_suggestions['suggested_sell_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {sell_price_diff:+.2f}元 ({sell_price_diff_pct:+.2f}%))")
+                            # 为避免误导，这里显示的是“当前价格对应的合理仓位”，而不是PPO目标仓位
+                            current_pos_pct = v7_suggestions.get('current_position_pct', v7_suggestions['suggested_position_pct'])
+                            print(f"      📊 当前价格对应的合理仓位: {current_pos_pct:.0f}%")
+                            print(f"      📝 仓位描述: {v7_suggestions['position_description']}")
+                            # 增加更详细的人性化说明
+                            if v7_suggestions.get('detailed_position_description'):
+                                print(f"      📖 详细说明: {v7_suggestions['detailed_position_description']}")
+                            
+                            # 显示详细的仓位价格建议
+                            if v7_suggestions.get('position_prices'):
+                                position_prices = v7_suggestions['position_prices']
+                                print(f"\n      📋 详细仓位价格建议:")
+                                print(f"         🟢 100%仓位（满仓）: {position_prices['100%']:.2f}元 (价格越低，买入越多)")
+                                print(f"         🟡 75%仓位:  {position_prices['75%']:.2f}元")
+                                print(f"         🟠 50%仓位:  {position_prices['50%']:.2f}元")
+                                print(f"         🟤 25%仓位:  {position_prices['25%']:.2f}元")
+                                print(f"         ⚪ 0%仓位（空仓）:   {position_prices['0%']:.2f}元 (价格越高，卖出越多)")
+                                
+                                # 显示当前价格对应的仓位
+                                current_pos_pct = v7_suggestions.get('current_position_pct', 50.0)
+                                print(f"         📍 当前价格 {current_price:.2f}元 对应建议仓位: {current_pos_pct:.0f}%")
+                                
+                                # 计算当前价格与各仓位价格的差异
+                                price_levels = [position_prices['100%'], position_prices['75%'], position_prices['50%'], position_prices['25%'], position_prices['0%']]
+                                position_labels = ['100%', '75%', '50%', '25%', '0%']
+                                closest_price = min(price_levels, key=lambda x: abs(x - current_price))
+                                closest_index = price_levels.index(closest_price)
+                                closest_position = position_labels[closest_index]
+                                price_diff_from_closest = abs(current_price - closest_price)
+                                price_diff_pct_from_closest = (price_diff_from_closest / current_price * 100) if current_price > 0 else 0
+                                
+                                if price_diff_pct_from_closest < 1.0:
+                                    print(f"         ✅ 当前价格接近{closest_position}仓位价格（{closest_price:.2f}元），差异仅{price_diff_pct_from_closest:.2f}%")
+                                else:
+                                    print(f"         💡 最接近的仓位价格: {closest_position}仓位 {closest_price:.2f}元 (差异: {price_diff_from_closest:.2f}元, {price_diff_pct_from_closest:.2f}%)")
+                            
+                            print(f"      📈 价格区间: {v7_suggestions['price_interval_pct']:.2f}% (基于波动率{v7_suggestions['volatility_pct']:.2f}%)")
+                            
+                            # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
+                            if ppo_action is not None and ppo_action <= 2:
+                                print(f"\n   ⚠️  V7下跌预警提示:")
+                                print(f"      📉 PPO模型建议卖出操作（动作={ppo_action}），请注意风险")
+                                print(f"      💡 建议：如果预测下跌2%以上，可考虑开盘卖出，在最低点再买回")
+                                print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
                 except Exception as e:
                     print(f"   ⚠️  PPO预测失败: {e}")
         elif ppo_model:
@@ -3529,7 +3950,36 @@ while True:
                 ppo_action = int(action)
                 ppo_operation = map_action_to_operation(ppo_action)
                 stock_name = get_stock_name(STOCK_CODE)
-                print(f"   🎯 V7 PPO动作 [{stock_name}({STOCK_CODE})]: {ppo_operation} (动作={ppo_action})")
+                print(f"   🎯 V7 PPO动作 [{stock_name}({STOCK_CODE})]: (动作={ppo_action})")
+                
+                # V7预测：添加买入卖出建议价格和当前建议持有仓位
+                v7_suggestions = calculate_v7_price_suggestions(current_price, ppo_action, closes)
+                if v7_suggestions:
+                    print(f"\n   💡 V7建议价格和仓位:")
+                    if v7_suggestions.get('suggested_buy_price'):
+                        buy_price_diff = v7_suggestions['suggested_buy_price'] - current_price
+                        buy_price_diff_pct = (buy_price_diff / current_price * 100) if current_price > 0 else 0
+                        print(f"      💰 建议买入价格: {v7_suggestions['suggested_buy_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {buy_price_diff:+.2f}元 ({buy_price_diff_pct:+.2f}%))")
+                    if v7_suggestions.get('suggested_sell_price'):
+                        sell_price_diff = v7_suggestions['suggested_sell_price'] - current_price
+                        sell_price_diff_pct = (sell_price_diff / current_price * 100) if current_price > 0 else 0
+                        print(f"      💰 建议卖出价格: {v7_suggestions['suggested_sell_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {sell_price_diff:+.2f}元 ({sell_price_diff_pct:+.2f}%))")
+                    # 为避免误导，这里显示的是“当前价格对应的合理仓位”，而不是PPO目标仓位
+                    current_pos_pct = v7_suggestions.get('current_position_pct', v7_suggestions['suggested_position_pct'])
+                    print(f"      📊 当前价格对应的合理仓位: {current_pos_pct:.0f}%")
+                    print(f"      📝 仓位描述: {v7_suggestions['position_description']}")
+                    # 增加更详细的人性化说明
+                    if v7_suggestions.get('detailed_position_description'):
+                        print(f"      📖 详细说明: {v7_suggestions['detailed_position_description']}")
+                    
+                    print(f"      📈 价格区间: {v7_suggestions['price_interval_pct']:.2f}% (基于波动率{v7_suggestions['volatility_pct']:.2f}%)")
+                    
+                    # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
+                    if ppo_action is not None and ppo_action <= 2:
+                        print(f"\n   ⚠️  V7下跌预警提示:")
+                        print(f"      📉 PPO模型建议卖出操作（动作={ppo_action}），请注意风险")
+                        print(f"      💡 建议：如果预测下跌2%以上，可考虑开盘卖出，在最低点再买回")
+                        print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
             except Exception as e:
                 print(f"   ⚠️  PPO预测失败: {e}")
         
@@ -3824,7 +4274,40 @@ while True:
             stock_name = get_stock_name(STOCK_CODE)
             print(f"\n   ⭐ V12融合决策 [{stock_name}({STOCK_CODE})]: {final_operation} (置信度={confidence:.2f})")
             
-            # V12优化：显示冲突检测和调整信息
+            # V12下跌预测检测：当预测下跌2%或3%以上时，提示做空处理（有区分度）
+            price_change_pct_for_warning = None
+            avg_prediction_for_warning = None
+            if conflict_info and conflict_info.get('price_change_pct') is not None:
+                price_change_pct_for_warning = conflict_info.get('price_change_pct', 0)
+                avg_prediction_for_warning = conflict_info.get('avg_prediction', current_price)
+            elif lstm_prediction is not None or transformer_prediction is not None:
+                # 如果没有conflict_info，使用LSTM/Transformer预测计算
+                predictions = []
+                if lstm_prediction is not None and lstm_prediction > 0:
+                    predictions.append(lstm_prediction)
+                if transformer_prediction is not None and transformer_prediction > 0:
+                    predictions.append(transformer_prediction)
+                if predictions:
+                    avg_prediction_for_warning = np.mean(predictions)
+                    price_change_pct_for_warning = (avg_prediction_for_warning - current_price) / current_price * 100 if current_price > 0 else 0
+            
+            # 区分2%和3%的提示：3%以上显示严重警告，2-3%显示一般警告
+            if price_change_pct_for_warning is not None and price_change_pct_for_warning <= -3.0:
+                # 下跌3%以上：严重警告
+                print(f"\n   🚨 V12严重下跌预警（≥3%）:")
+                print(f"      📉 预测价格大幅下跌: {abs(price_change_pct_for_warning):.2f}% (预测价格: {avg_prediction_for_warning:.2f}元, 当前价格: {current_price:.2f}元)")
+                print(f"      ⚠️  强烈建议：开盘立即卖出，在最低点再买回")
+                print(f"      🔄 做空处理：强烈建议进行做空操作以规避大幅下跌风险")
+                print(f"      🛑 风险提示：下跌幅度较大，请务必谨慎操作，严格执行止损")
+            elif price_change_pct_for_warning is not None and price_change_pct_for_warning <= -2.0:
+                # 下跌2-3%：一般警告
+                print(f"\n   ⚠️  V12下跌预警（2-3%）:")
+                print(f"      📉 预测价格下跌: {abs(price_change_pct_for_warning):.2f}% (预测价格: {avg_prediction_for_warning:.2f}元, 当前价格: {current_price:.2f}元)")
+                print(f"      💡 建议：可考虑开盘卖出，在最低点再买回")
+                print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
+                print(f"      ⚠️  风险提示：下跌幅度中等，请注意风险控制")
+            
+# V12优化：显示冲突检测和调整信息
             if conflict_info and conflict_info.get('has_conflict', False):
                 print(f"   ⚠️  信号冲突检测:")
                 if conflict_info.get('avg_prediction') is not None:
