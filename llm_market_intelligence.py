@@ -49,6 +49,9 @@ class MarketIntelligenceAgent:
         # 创建缓存目录
         if self.enable_cache:
             os.makedirs(cache_dir, exist_ok=True)
+            # 创建 provider 子目录（如 deepseek/ 或 grok/）
+            provider_dir = os.path.join(cache_dir, self.provider)
+            os.makedirs(provider_dir, exist_ok=True)
         
         # 设置 API 配置
         if self.provider == "deepseek":
@@ -74,7 +77,9 @@ class MarketIntelligenceAgent:
     
     def _get_cache_path(self, date: str) -> str:
         """获取缓存文件路径"""
-        return os.path.join(self.cache_dir, f"{date}_{self.provider}.json")
+        # 文件保存在 provider 子目录下（如 market_intelligence_cache/deepseek/）
+        provider_dir = os.path.join(self.cache_dir, self.provider)
+        return os.path.join(provider_dir, f"{date}_{self.provider}.json")
     
     def _load_from_cache(self, date: str) -> Optional[Dict]:
         """从缓存加载数据"""

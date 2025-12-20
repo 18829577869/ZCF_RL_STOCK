@@ -1,0 +1,585 @@
+[
+  {
+    "stock_code": "sz.002706",
+    "stock_name": "良信股份",
+    "status": "success",
+    "initial_balance": 50000.0,
+    "final_value": 2396202.648481761,
+    "total_return": 4692.405296963522,
+    "buy_hold_return": 10.84198385236447,
+    "max_drawdown": -0.003058572197503122,
+    "total_trades": 185,
+    "sell_triggered_count": 92,
+    "final_shares_held": 35300.0,
+    "final_balance": 2056969.6484817613,
+    "trades": [
+      {
+        "date": "2025-12-11",
+        "action": "sell_all_drop3pct",
+        "price": 9.725135000000002,
+        "shares": 35800,
+        "amount": 347721.15161042,
+        "fee": 438.6813895800001,
+        "reason": "预测下跌-8.24%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-12-11",
+        "action": "buy_back_t0",
+        "price": 8.712068966545164,
+        "shares": 35700,
+        "amount": 311101.7275298098,
+        "fee": 80.86542414747221,
+        "reason": "做T+0：在预测低点8.71买回（卖出价9.73，卖出35800股）",
+        "t0_profit": 36166.457394337696,
+        "t0_profit_pct": 11.628305943686488,
+        "predicted_drop_pct": -8.243254910530357
+      },
+      {
+        "date": "2025-12-12",
+        "action": "sell_all_drop3pct",
+        "price": 9.485255,
+        "shares": 35700,
+        "amount": 338196.93775959004,
+        "fee": 426.66574041000007,
+        "reason": "预测下跌-12.75%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-12-12",
+        "action": "buy_back_t0",
+        "price": 8.71152446826249,
+        "shares": 35600,
+        "amount": 310210.9049406229,
+        "fee": 80.63387047823761,
+        "reason": "做T+0：在预测低点8.71买回（卖出价9.49，卖出35700股）",
+        "t0_profit": 27544.806929855342,
+        "t0_profit_pct": 8.881689244590158,
+        "predicted_drop_pct": -12.753798769327842
+      },
+      {
+        "date": "2025-12-15",
+        "action": "sell_all_drop3pct",
+        "price": 9.975010000000001,
+        "shares": 35600,
+        "amount": 354662.91695144004,
+        "fee": 447.43904856000006,
+        "reason": "预测下跌-11.16%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-12-15",
+        "action": "buy_back_t0",
+        "price": 8.7105834515959,
+        "shares": 35500,
+        "amount": 309306.1112169127,
+        "fee": 80.39868525823016,
+        "reason": "做T+0：在预测低点8.71买回（卖出价9.98，卖出35600股）",
+        "t0_profit": 44887.142468345584,
+        "t0_profit_pct": 14.515979961967307,
+        "predicted_drop_pct": -11.160914934411363
+      },
+      {
+        "date": "2025-12-16",
+        "action": "sell_all_drop3pct",
+        "price": 9.725135000000002,
+        "shares": 35500,
+        "amount": 344807.28721145005,
+        "fee": 435.00528855000005,
+        "reason": "预测下跌-8.52%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-12-16",
+        "action": "buy_back_t0",
+        "price": 8.703653588926791,
+        "shares": 35400,
+        "amount": 308189.4454756409,
+        "fee": 80.10842763248219,
+        "reason": "做T+0：在预测低点8.70买回（卖出价9.73，卖出35500股）",
+        "t0_profit": 36160.441951991656,
+        "t0_profit_pct": 11.736236979523044,
+        "predicted_drop_pct": -8.52466943261501
+      },
+      {
+        "date": "2025-12-17",
+        "action": "sell_all_drop3pct",
+        "price": 9.505245,
+        "shares": 35400,
+        "amount": 336061.70105202,
+        "fee": 423.97194798000004,
+        "reason": "预测下跌-9.54%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-12-17",
+        "action": "buy_back_t0",
+        "price": 8.697616898207364,
+        "shares": 35300,
+        "amount": 307105.7032346117,
+        "fee": 79.82672789174718,
+        "reason": "做T+0：在预测低点8.69买回（卖出价9.51，卖出35400股）",
+        "t0_profit": 28509.271993280046,
+        "t0_profit_pct": 9.285625145884424,
+        "predicted_drop_pct": -9.539331289533525
+      }
+    ],
+    "daily_values": [
+      {
+        "date": "2025-11-20",
+        "price": 10.15,
+        "balance": 1321319.298335868,
+        "shares_held": 37200.0,
+        "total_value": 1698899.298335868,
+        "predicted_drop_pct": -12.45867257634994
+      },
+      {
+        "date": "2025-11-21",
+        "price": 9.51,
+        "balance": 1364682.592618861,
+        "shares_held": 37100.0,
+        "total_value": 1717503.592618861,
+        "predicted_drop_pct": -7.0054889665417095
+      },
+      {
+        "date": "2025-11-24",
+        "price": 9.8,
+        "balance": 1392518.9376557737,
+        "shares_held": 37000.0,
+        "total_value": 1755118.9376557737,
+        "predicted_drop_pct": -10.10262804980182
+      },
+      {
+        "date": "2025-11-25",
+        "price": 9.77,
+        "balance": 1430180.0582418814,
+        "shares_held": 36900.0,
+        "total_value": 1790693.0582418814,
+        "predicted_drop_pct": -10.11292013809648
+      },
+      {
+        "date": "2025-11-26",
+        "price": 9.66,
+        "balance": 1466432.035423737,
+        "shares_held": 36800.0,
+        "total_value": 1821920.035423737,
+        "predicted_drop_pct": -9.342446867723645
+      },
+      {
+        "date": "2025-11-27",
+        "price": 9.77,
+        "balance": 1498817.4788550318,
+        "shares_held": 36700.0,
+        "total_value": 1857376.4788550318,
+        "predicted_drop_pct": -10.540834511558732
+      },
+      {
+        "date": "2025-11-28",
+        "price": 9.96,
+        "balance": 1537279.847048159,
+        "shares_held": 36600.0,
+        "total_value": 1901815.847048159,
+        "predicted_drop_pct": -12.329860749733031
+      },
+      {
+        "date": "2025-12-01",
+        "price": 9.97,
+        "balance": 1581971.1283495072,
+        "shares_held": 36500.0,
+        "total_value": 1945876.1283495072,
+        "predicted_drop_pct": -12.450822419603714
+      },
+      {
+        "date": "2025-12-02",
+        "price": 9.92,
+        "balance": 1626606.8501312628,
+        "shares_held": 36400.0,
+        "total_value": 1987694.8501312628,
+        "predicted_drop_pct": -12.027301657344077
+      },
+      {
+        "date": "2025-12-03",
+        "price": 9.95,
+        "balance": 1670399.2304053009,
+        "shares_held": 36300.0,
+        "total_value": 2031584.2304053009,
+        "predicted_drop_pct": -12.293451904651505
+      },
+      {
+        "date": "2025-12-04",
+        "price": 9.93,
+        "balance": 1716967.5327210594,
+        "shares_held": 36200.0,
+        "total_value": 2076433.5327210594,
+        "predicted_drop_pct": -12.115395879457365
+      },
+      {
+        "date": "2025-12-05",
+        "price": 9.99,
+        "balance": 1759377.4656271527,
+        "shares_held": 36100.0,
+        "total_value": 2120016.4656271525,
+        "predicted_drop_pct": -12.627301237604655
+      },
+      {
+        "date": "2025-12-08",
+        "price": 9.92,
+        "balance": 1805263.109856668,
+        "shares_held": 36000.0,
+        "total_value": 2162383.109856668,
+        "predicted_drop_pct": -12.007067743087974
+      },
+      {
+        "date": "2025-12-09",
+        "price": 9.7,
+        "balance": 1847608.52511316,
+        "shares_held": 35900.0,
+        "total_value": 2195838.52511316,
+        "predicted_drop_pct": -10.062464303577077
+      },
+      {
+        "date": "2025-12-10",
+        "price": 9.74,
+        "balance": 1881433.5462944396,
+        "shares_held": 35800.0,
+        "total_value": 2230125.5462944396,
+        "predicted_drop_pct": -10.487884185152623
+      },
+      {
+        "date": "2025-12-11",
+        "price": 9.49,
+        "balance": 1918052.9703750499,
+        "shares_held": 35700.0,
+        "total_value": 2256845.97037505,
+        "predicted_drop_pct": -8.243254910530357
+      },
+      {
+        "date": "2025-12-12",
+        "price": 9.98,
+        "balance": 1946039.0031940169,
+        "shares_held": 35600.0,
+        "total_value": 2301327.003194017,
+        "predicted_drop_pct": -12.753798769327842
+      },
+      {
+        "date": "2025-12-15",
+        "price": 9.8,
+        "balance": 1991395.808928544,
+        "shares_held": 35500.0,
+        "total_value": 2339295.8089285437,
+        "predicted_drop_pct": -11.160914934411363
+      },
+      {
+        "date": "2025-12-16",
+        "price": 9.51,
+        "balance": 2028013.650664353,
+        "shares_held": 35400.0,
+        "total_value": 2364667.650664353,
+        "predicted_drop_pct": -8.52466943261501
+      },
+      {
+        "date": "2025-12-17",
+        "price": 9.61,
+        "balance": 2056969.6484817613,
+        "shares_held": 35300.0,
+        "total_value": 2396202.648481761,
+        "predicted_drop_pct": -9.539331289533525
+      }
+    ]
+  },
+  {
+    "stock_code": "sh.603267",
+    "stock_name": "鸿远电子",
+    "status": "success",
+    "initial_balance": 50000.0,
+    "final_value": 219477.7086296939,
+    "total_return": 338.9554172593878,
+    "buy_hold_return": 5.158730158730166,
+    "max_drawdown": -18.532200682835594,
+    "total_trades": 104,
+    "sell_triggered_count": 49,
+    "final_shares_held": 4600.0,
+    "final_balance": 57.70862969389873,
+    "trades": [
+      {
+        "date": "2025-10-27",
+        "action": "sell_all_drop3pct",
+        "price": 54.27285,
+        "shares": 3200,
+        "amount": 173454.2918688,
+        "fee": 218.82813120000003,
+        "reason": "预测下跌-10.53%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-10-27",
+        "action": "buy_back_t0",
+        "price": 51.04782717993021,
+        "shares": 3100,
+        "amount": 158289.40880649068,
+        "fee": 41.14454870702375,
+        "reason": "做T+0：在预测低点51.02买回（卖出价54.27，卖出3200股）",
+        "t0_profit": 9997.570742216347,
+        "t0_profit_pct": 6.317649542070476,
+        "predicted_drop_pct": -10.534252109557688
+      },
+      {
+        "date": "2025-10-28",
+        "action": "sell_all_drop3pct",
+        "price": 56.7716,
+        "shares": 3100,
+        "amount": 175770.2101304,
+        "fee": 221.7498696,
+        "reason": "预测下跌-13.10%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-10-28",
+        "action": "buy_back_t0",
+        "price": 51.163749350788585,
+        "shares": 3000,
+        "amount": 153531.15577685938,
+        "fee": 39.9077244936151,
+        "reason": "做T+0：在预测低点51.14买回（卖出价56.77，卖出3100股）",
+        "t0_profit": 16823.55194763424,
+        "t0_profit_pct": 10.960593624135916,
+        "predicted_drop_pct": -13.104196668380188
+      },
+      {
+        "date": "2025-10-29",
+        "action": "sell_all_drop3pct",
+        "price": 57.96100500000001,
+        "shares": 3000,
+        "amount": 173663.92240110002,
+        "fee": 219.09259890000004,
+        "reason": "预测下跌-12.20%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-10-29",
+        "action": "buy_back_t0",
+        "price": 51.29236581098556,
+        "shares": 2900,
+        "amount": 148786.5352956796,
+        "fee": 38.67444382148311,
+        "reason": "做T+0：在预测低点51.27买回（卖出价57.96，卖出3000股）",
+        "t0_profit": 19339.053648141904,
+        "t0_profit_pct": 13.001231437810167,
+        "predicted_drop_pct": -12.199464900217198
+      },
+      {
+        "date": "2025-10-30",
+        "action": "sell_all_drop3pct",
+        "price": 57.671150000000004,
+        "shares": 2900,
+        "amount": 167035.6046179,
+        "fee": 210.7303821,
+        "reason": "预测下跌-8.32%超过-3.0%（覆盖PPO决策）",
+        "ppo_action": 6,
+        "ppo_operation": "buy"
+      },
+      {
+        "date": "2025-10-30",
+        "action": "buy_back_t0",
+        "price": 51.3599021133399,
+        "shares": 2800,
+        "amount": 143845.11592609022,
+        "fee": 37.39000873851145,
+        "reason": "做T+0：在预测低点51.33买回（卖出价57.67，卖出2900股）",
+        "t0_profit": 17671.494082648296,
+        "t0_profit_pct": 12.288278651179246,
+        "predicted_drop_pct": -8.315350962954135
+      },
+      {
+        "date": "2025-10-31",
+        "action": "buy_100pct",
+        "price": 53.04651,
+        "shares": 1700,
+        "amount": 90202.51355742,
+        "fee": 23.44655742,
+        "reason": "PPO模型决策：buy 100%",
+        "ppo_action": 6
+      },
+      {
+        "date": "2025-11-03",
+        "action": "buy_100pct",
+        "price": 50.325149999999994,
+        "shares": 100,
+        "amount": 5037.56532515,
+        "fee": 5.05032515,
+        "reason": "PPO模型决策：buy 100%",
+        "ppo_action": 6
+      }
+    ],
+    "daily_values": [
+      {
+        "date": "2025-11-20",
+        "price": 45.92,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 211289.7086296939,
+        "predicted_drop_pct": 7.796548114836421
+      },
+      {
+        "date": "2025-11-21",
+        "price": 44.63,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 205355.7086296939,
+        "predicted_drop_pct": 10.729328677335333
+      },
+      {
+        "date": "2025-11-24",
+        "price": 46.57,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 214279.7086296939,
+        "predicted_drop_pct": 6.0345459680636955
+      },
+      {
+        "date": "2025-11-25",
+        "price": 46.6,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 214417.7086296939,
+        "predicted_drop_pct": 5.930790716998056
+      },
+      {
+        "date": "2025-11-26",
+        "price": 45.97,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 211519.7086296939,
+        "predicted_drop_pct": 7.340803534304646
+      },
+      {
+        "date": "2025-11-27",
+        "price": 45.68,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 210185.7086296939,
+        "predicted_drop_pct": 7.969612415534179
+      },
+      {
+        "date": "2025-11-28",
+        "price": 46.8,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 215337.7086296939,
+        "predicted_drop_pct": 5.39168366000183
+      },
+      {
+        "date": "2025-12-01",
+        "price": 47.54,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 218741.7086296939,
+        "predicted_drop_pct": 3.815241325388049
+      },
+      {
+        "date": "2025-12-02",
+        "price": 47.03,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 216395.7086296939,
+        "predicted_drop_pct": 4.998976885702115
+      },
+      {
+        "date": "2025-12-03",
+        "price": 47.04,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 216441.7086296939,
+        "predicted_drop_pct": 5.027893063973403
+      },
+      {
+        "date": "2025-12-04",
+        "price": 47.35,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 217867.7086296939,
+        "predicted_drop_pct": 4.397833158499081
+      },
+      {
+        "date": "2025-12-05",
+        "price": 48.06,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 221133.7086296939,
+        "predicted_drop_pct": 2.9427370328581697
+      },
+      {
+        "date": "2025-12-08",
+        "price": 47.98,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 220765.7086296939,
+        "predicted_drop_pct": 3.200622229041434
+      },
+      {
+        "date": "2025-12-09",
+        "price": 48.2,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 221777.7086296939,
+        "predicted_drop_pct": 2.8170652112525456
+      },
+      {
+        "date": "2025-12-10",
+        "price": 48.49,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 223111.7086296939,
+        "predicted_drop_pct": 2.2940104168502238
+      },
+      {
+        "date": "2025-12-11",
+        "price": 48.73,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 224215.7086296939,
+        "predicted_drop_pct": 1.8848789269102741
+      },
+      {
+        "date": "2025-12-12",
+        "price": 49.5,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 227757.7086296939,
+        "predicted_drop_pct": 0.4205387674196779
+      },
+      {
+        "date": "2025-12-15",
+        "price": 48.88,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 224905.7086296939,
+        "predicted_drop_pct": 1.7845016844729142
+      },
+      {
+        "date": "2025-12-16",
+        "price": 47.82,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 220029.7086296939,
+        "predicted_drop_pct": 4.058550890895023
+      },
+      {
+        "date": "2025-12-17",
+        "price": 47.7,
+        "balance": 57.70862969389873,
+        "shares_held": 4600.0,
+        "total_value": 219477.7086296939,
+        "predicted_drop_pct": 4.298920311517931
+      }
+    ]
+  }
+]

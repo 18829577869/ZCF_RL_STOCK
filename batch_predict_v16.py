@@ -1,5 +1,5 @@
 """
-V15 实时预测系统 - DeepSeek 轮次复盘增强版（歌尔股份002241专用）
+V16批量预测系统 - 批量运行所有V16预测股票
 整合 V7、V9、V10、V11、V12、V13 的所有功能：
 1. V7功能：技术指标、多数据源、LLM解释、成本模型、PPO强化学习
 2. V9功能：LSTM/GRU、注意力机制、动态参数优化、自动学习优化
@@ -16,8 +16,11 @@ V14新增功能：
 V15新增功能：
 - DeepSeek 轮次复盘：每轮预测结束调用 DeepSeek 对当前决策进行简洁点评，提供执行要点与风险提醒
 
+V16批量预测功能：
+- 批量运行多个股票的预测，每个股票只运行一次预测
+- 先以两个股票做修改验证：603267和603698
+
 设计理念：多模型协同工作，智能融合决策，自动选择最优模型，风险控制优先，科学资金管理，丰富数据源
-专用标的：歌尔股份002241（消费电子板块）
 """
 
 import os
@@ -29,6 +32,7 @@ import datetime
 import time
 import json
 import threading
+from io import StringIO
 
 # 代理配置（可通过环境变量或配置文件设置）
 # 如果设置了代理，将用于反爬虫功能
@@ -234,7 +238,6 @@ def convert_stock_code(code):
 def get_stock_name(code):
     """根据股票代码获取股票名称"""
     stock_name_map = {
-        'sz.000625': '长安汽车',
         'sz.002025': '航天电器',
         'sz.002241': '歌尔股份',
         'sz.002475': '立讯精密',
@@ -249,11 +252,13 @@ def get_stock_name(code):
         'sz.002266': '浙富控股',
         'sz.300153': '科泰电源',
         'sh.601399': '国机重装',
+        'sz.301005': '超捷股份',
+        'sh.603698': '航天工程',
     }
     return stock_name_map.get(code, code)  # 如果找不到，返回代码本身
 
 def map_action_to_operation(action):
-    """将动作映射到具体操作"""
+    """将动作映射到具体操作（内部使用，不直接展示给用户）"""
     actions = {
         0: "卖出 100%",
         1: "卖出 50%",
@@ -264,6 +269,19 @@ def map_action_to_operation(action):
         6: "买入 100%"
     }
     return actions.get(action, "未知动作")
+
+def map_action_to_direction(action):
+    """将PPO动作映射为方向性描述（避免“买入100%”等歧义）"""
+    directions = {
+        0: "强烈看空",
+        1: "看空",
+        2: "轻微看空",
+        3: "中性",
+        4: "轻微看多",
+        5: "看多",
+        6: "强烈看多"
+    }
+    return directions.get(action, "未知")
 
 def fetch_akshare_5min(code_info, days=7):
     """使用 AkShare 获取5分钟K线数据"""
@@ -408,11 +426,365 @@ def log_trade_operation(stock_code, operation, current_price, shares_held,
     except:
         return False
 
+# ==================== V16批量预测结果保存功能 ====================
+
+def get_batch_predict_result_file():
+    """获取批量预测结果文件路径（带日期）- JSON格式"""
+    today = datetime.datetime.now().strftime('%Y-%m-%d')
+    return f"batch_predict_results_{today}.json"
+
+def get_batch_predict_log_file():
+    """获取批量预测日志文件路径（带日期）- 文本格式，包含完整控制台输出"""
+    today = datetime.datetime.now().strftime('%Y-%m-%d')
+    return f"batch_predict_log_{today}.txt"
+
+class OutputCapture:
+    """捕获控制台输出的上下文管理器"""
+    def __init__(self):
+        self.original_stdout = sys.stdout
+        self.captured_output = StringIO()
+        self.output_lines = []
+    
+    def __enter__(self):
+        sys.stdout = self
+        return self
+    
+    def __exit__(self, *args):
+        sys.stdout = self.original_stdout
+        self.captured_output.seek(0)
+        self.output_lines = self.captured_output.getvalue().splitlines()
+    
+    def write(self, text):
+        self.original_stdout.write(text)  # 同时输出到控制台
+        self.captured_output.write(text)
+    
+    def flush(self):
+        self.original_stdout.flush()
+        self.captured_output.flush()
+    
+    def get_output(self):
+        """获取捕获的输出"""
+        # 如果 output_lines 为空（说明 __exit__ 还没执行），直接从 captured_output 获取
+        if not self.output_lines:
+            # 使用 getvalue() 不会改变流的位置，适合在 with 块内部调用
+            content = self.captured_output.getvalue()
+            if content:
+                return content
+        return '\n'.join(self.output_lines)
+
+def append_to_log_file(content, log_file):
+    """追加内容到日志文件"""
+    try:
+        with open(log_file, 'a', encoding='utf-8') as f:
+            f.write(content)
+            f.write('\n')
+        return True
+    except Exception as e:
+        print(f"   ⚠️  写入日志文件失败: {e}")
+        return False
+
+def save_batch_predict_result(stock_code, stock_name, prediction_data):
+    """
+    保存单个股票的批量预测结果到带日期的记录文件
+    
+    Args:
+        stock_code: 股票代码
+        stock_name: 股票名称
+        prediction_data: 预测数据字典，包含所有预测信息
+    """
+    try:
+        result_file = get_batch_predict_result_file()
+        
+        # 读取现有结果（如果存在）
+        all_results = []
+        if os.path.exists(result_file):
+            try:
+                with open(result_file, 'r', encoding='utf-8') as f:
+                    all_results = json.load(f)
+            except:
+                all_results = []
+        
+        # 准备当前预测结果
+        current_result = {
+            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S'),
+            'date': datetime.datetime.now().strftime('%Y-%m-%d'),
+            'time': datetime.datetime.now().strftime('%H:%M:%S'),
+            'stock_code': stock_code,
+            'stock_name': stock_name,
+            **prediction_data
+        }
+        
+        # 检查是否已存在该股票的记录（同一天），如果存在则更新，否则追加
+        found = False
+        for i, result in enumerate(all_results):
+            if (result.get('stock_code') == stock_code and 
+                result.get('date') == current_result['date']):
+                all_results[i] = current_result
+                found = True
+                break
+        
+        if not found:
+            all_results.append(current_result)
+        
+        # 保存到文件
+        with open(result_file, 'w', encoding='utf-8') as f:
+            json.dump(all_results, f, indent=2, ensure_ascii=False)
+        
+        return True
+    except Exception as e:
+        print(f"   ⚠️  保存批量预测结果失败: {e}")
+        return False
+
+# ==================== V16预测准确率统计功能 ====================
+
+def get_prediction_log_file(stock_code):
+    """获取预测日志文件路径"""
+    return f"v12_prediction_log_{stock_code.replace('.', '_')}.json"
+
+def save_v12_prediction(date_str, transformer_prediction, current_price, stock_code):
+    """
+    保存V12 Transformer预测结果
+    
+    Args:
+        date_str: 日期字符串（YYYY-MM-DD）
+        transformer_prediction: Transformer预测价格
+        current_price: 当前价格
+        stock_code: 股票代码
+    """
+    try:
+        prediction_log_file = get_prediction_log_file(stock_code)
+        predictions = []
+        if os.path.exists(prediction_log_file):
+            with open(prediction_log_file, 'r', encoding='utf-8') as f:
+                predictions = json.load(f)
+        
+        # 检查是否已存在该日期的预测，如果存在则更新
+        found = False
+        for pred in predictions:
+            if pred.get('date') == date_str:
+                pred['predicted_price'] = transformer_prediction
+                pred['current_price'] = current_price
+                pred['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                found = True
+                break
+        
+        if not found:
+            predictions.append({
+                'date': date_str,
+                'predicted_price': transformer_prediction,
+                'current_price': current_price,
+                'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        # 保存到文件
+        with open(prediction_log_file, 'w', encoding='utf-8') as f:
+            json.dump(predictions, f, indent=2, ensure_ascii=False)
+        
+        return True
+    except Exception as e:
+        print(f"   ⚠️  保存V12预测失败: {e}")
+        return False
+
+def get_actual_close_price(stock_code, date_str):
+    """
+    获取指定日期的实际收盘价
+    
+    Args:
+        stock_code: 股票代码
+        date_str: 日期字符串（YYYY-MM-DD）
+    
+    Returns:
+        float: 收盘价，如果获取失败返回None
+    """
+    try:
+        import baostock as bs
+        bs.login()
+        
+        # 转换股票代码格式
+        if stock_code.startswith('sh.'):
+            bs_code = f"sh.{stock_code.split('.')[1]}"
+        elif stock_code.startswith('sz.'):
+            bs_code = f"sz.{stock_code.split('.')[1]}"
+        else:
+            bs_code = stock_code
+        
+        # 查询指定日期的K线数据
+        rs = bs.query_history_k_data_plus(
+            bs_code,
+            "date,close",
+            start_date=date_str,
+            end_date=date_str,
+            frequency="d",
+            adjustflag="3"
+        )
+        
+        if rs.error_code == '0':
+            data_list = []
+            while rs.next():
+                data_list.append(rs.get_row_data())
+            
+            bs.logout()
+            
+            if len(data_list) > 0:
+                return float(data_list[0][1])  # 返回收盘价
+        
+        bs.logout()
+        return None
+    except Exception as e:
+        print(f"   ⚠️  获取实际收盘价失败: {e}")
+        return None
+
+def calculate_prediction_accuracy(stock_code):
+    """
+    计算V12预测准确率统计
+    
+    Args:
+        stock_code: 股票代码
+    
+    Returns:
+        dict: 统计结果
+    """
+    try:
+        prediction_log_file = get_prediction_log_file(stock_code)
+        if not os.path.exists(prediction_log_file):
+            return None
+        
+        with open(prediction_log_file, 'r', encoding='utf-8') as f:
+            predictions = json.load(f)
+        
+        if len(predictions) == 0:
+            return None
+        
+        # 按日期排序
+        predictions.sort(key=lambda x: x.get('date', ''))
+        
+        accuracy_stats = {
+            'total_predictions': 0,
+            'valid_comparisons': 0,
+            'total_error': 0.0,
+            'total_abs_error': 0.0,
+            'total_error_pct': 0.0,
+            'total_abs_error_pct': 0.0,
+            'details': []
+        }
+        
+        today = datetime.datetime.now().date()
+        
+        for i, pred in enumerate(predictions):
+            pred_date_str = pred.get('date')
+            if not pred_date_str:
+                continue
+            
+            try:
+                pred_date = datetime.datetime.strptime(pred_date_str, '%Y-%m-%d').date()
+            except:
+                continue
+            
+            # 只统计昨天的预测和今天的实际收盘价
+            if pred_date >= today:
+                continue  # 跳过今天及未来的预测
+            
+            predicted_price = pred.get('predicted_price')
+            if predicted_price is None or predicted_price <= 0:
+                continue
+            
+            accuracy_stats['total_predictions'] += 1
+            
+            # 获取预测日期后一天的实际收盘价
+            next_date = pred_date + datetime.timedelta(days=1)
+            
+            # 跳过周末
+            while next_date.weekday() >= 5:  # 5=Saturday, 6=Sunday
+                next_date += datetime.timedelta(days=1)
+            
+            # 如果下一天是今天或未来，跳过
+            if next_date >= today:
+                continue
+            
+            next_date_str = next_date.strftime('%Y-%m-%d')
+            actual_close = get_actual_close_price(stock_code, next_date_str)
+            
+            if actual_close is None or actual_close <= 0:
+                continue
+            
+            # 计算误差
+            error = predicted_price - actual_close
+            abs_error = abs(error)
+            error_pct = (error / actual_close * 100) if actual_close > 0 else 0
+            abs_error_pct = abs(error_pct)
+            
+            accuracy_stats['valid_comparisons'] += 1
+            accuracy_stats['total_error'] += error
+            accuracy_stats['total_abs_error'] += abs_error
+            accuracy_stats['total_error_pct'] += error_pct
+            accuracy_stats['total_abs_error_pct'] += abs_error_pct
+            
+            accuracy_stats['details'].append({
+                'prediction_date': pred_date_str,
+                'actual_date': next_date_str,
+                'predicted_price': predicted_price,
+                'actual_close': actual_close,
+                'error': error,
+                'abs_error': abs_error,
+                'error_pct': error_pct,
+                'abs_error_pct': abs_error_pct
+            })
+        
+        # 计算平均值
+        if accuracy_stats['valid_comparisons'] > 0:
+            accuracy_stats['avg_error'] = accuracy_stats['total_error'] / accuracy_stats['valid_comparisons']
+            accuracy_stats['avg_abs_error'] = accuracy_stats['total_abs_error'] / accuracy_stats['valid_comparisons']
+            accuracy_stats['avg_error_pct'] = accuracy_stats['total_error_pct'] / accuracy_stats['valid_comparisons']
+            accuracy_stats['avg_abs_error_pct'] = accuracy_stats['total_abs_error_pct'] / accuracy_stats['valid_comparisons']
+        else:
+            accuracy_stats['avg_error'] = 0.0
+            accuracy_stats['avg_abs_error'] = 0.0
+            accuracy_stats['avg_error_pct'] = 0.0
+            accuracy_stats['avg_abs_error_pct'] = 0.0
+        
+        return accuracy_stats
+    except Exception as e:
+        print(f"   ⚠️  计算预测准确率失败: {e}")
+        return None
+
+def display_prediction_accuracy(stock_code):
+    """显示V12预测准确率统计"""
+    try:
+        stats = calculate_prediction_accuracy(stock_code)
+        if stats is None or stats['valid_comparisons'] == 0:
+            print(f"\n   📊 V12预测准确率统计: 暂无有效数据")
+            return
+        
+        print(f"\n   📊 V12预测准确率统计:")
+        print(f"      ✅ 总预测次数: {stats['total_predictions']} 次")
+        print(f"      ✅ 有效对比次数: {stats['valid_comparisons']} 次")
+        print(f"      📈 平均误差: {stats['avg_error']:.2f} 元 ({stats['avg_error_pct']:+.2f}%)")
+        print(f"      📊 平均绝对误差: {stats['avg_abs_error']:.2f} 元 ({stats['avg_abs_error_pct']:.2f}%)")
+        
+        # 显示最近5次预测的详细情况
+        if len(stats['details']) > 0:
+            print(f"\n      📋 最近5次预测详情:")
+            recent_details = stats['details'][-5:]
+            for detail in recent_details:
+                print(f"         {detail['prediction_date']} 预测 {detail['predicted_price']:.2f}元 → "
+                      f"{detail['actual_date']} 实际 {detail['actual_close']:.2f}元 "
+                      f"(误差: {detail['error']:+.2f}元, {detail['error_pct']:+.2f}%)")
+    except Exception as e:
+        print(f"   ⚠️  显示预测准确率失败: {e}")
+
 # ==================== 配置参数 ====================
 
 # 基础配置
-MODEL_PATH = "ppo_stock_v7_000625.zip"  # V11 长安汽车000625专用模型
-STOCK_CODE = 'sz.000625'  # 股票代码（长安汽车）
+MODEL_PATH = "ppo_stock_v7_002025.zip"  # V12使用通用PPO模型，也可以使用专用模型
+
+# 批量预测：股票列表（先以两个股票做验证）
+STOCK_LIST = [
+    {'code': 'sh.603267', 'name': '鸿远电子'},
+    {'code': 'sh.603698', 'name': '航天工程'},
+]
+
+# 当前处理的股票代码（会在循环中动态设置）
+STOCK_CODE = None
 LLM_PROVIDER = "deepseek"
 ENABLE_LLM = True
 DEEPSEEK_API_KEY = os.getenv('DEEPSEEK_API_KEY', 'sk-167914945f7945d498e09a7f186c101d')
@@ -534,12 +906,12 @@ except ImportError:
     STOCKAPI_AVAILABLE = False
 CANDIDATE_MODELS = [  # 候选模型列表（按优先级排序）
     {
-        'name': '300762模型（最佳）',
+        'name': '002025模型（最佳）',
         'paths': [
-            'ppo_stock_v7_300762.zip',
-            'models_v7_300762/best/best_model.zip'
+            'ppo_stock_v7_002025.zip',
+            'models_v7_002025/best/best_model.zip'
         ],
-        'description': '上海瀚讯300762模型（最佳匹配）'
+        'description': '航天电器002025模型（最佳匹配）'
     },
     {
         'name': '通用模型',
@@ -580,7 +952,8 @@ MODEL_WEIGHTS = {
 
 # 文件路径
 TRADE_LOG_FILE = "trade_log.csv"
-PORTFOLIO_STATE_FILE = f"portfolio_state_{STOCK_CODE}.json"
+# PORTFOLIO_STATE_FILE 将在每个股票循环中动态设置
+PORTFOLIO_STATE_FILE = None
 
 # V7持仓编辑器配置
 ENABLE_WEB_EDITOR = True          # 是否启用网页持仓编辑
@@ -590,7 +963,7 @@ WEB_EDITOR_HOST = "127.0.0.1"    # 仅本机访问
 # ==================== 版本标识 ====================
 
 print("\n" + "=" * 70)
-print("V16 实时预测系统 - 趋势/震荡双策略 + DeepSeek复盘 + StockAPI（长安汽车000625专用）")
+print("V16 批量预测系统 - 趋势/震荡双策略 + DeepSeek复盘 + StockAPI（批量处理多个股票）")
 print("=" * 70)
 print("整合功能:")
 print("   V7: 技术指标、多数据源、LLM解释、成本模型、PPO强化学习")
@@ -603,22 +976,22 @@ print("   V14: StockAPI数据源集成")
 print("   V15: DeepSeek 轮次复盘（每轮给出执行要点+风险提示）")
 print("   V16: 趋势/震荡双策略（突破跟随 + 布林带均值回归）")
 print("=" * 70)
-print("V15新增功能:")
+print("⭐ V15新增功能:")
 print("   - DeepSeek轮次复盘：每轮预测结束调用 DeepSeek 输出简洁点评")
 print("   - 输出位置：放在本轮所有预测信息之后，便于快速执行")
 print("   - ATR动态止损：基于ATR×倍数的海龟风格止损，更适应波动")
-print("V16新增功能:")
+print("⭐ V16新增功能:")
 print("   - 趋势/震荡双策略：趋势突破跟随 + 震荡布林均值回归，与模型信号加权融合")
-print("V14功能回顾:")
+print("⭐ V14功能回顾:")
 print("   - StockAPI集成：新增StockAPI数据源支持，提供更丰富的股票数据")
 print("   - 数据源优先级优化：StockAPI作为高优先级数据源，提供实时行情数据")
 print("   - 多数据源容错增强：StockAPI失败时自动回退到其他数据源")
 if ENABLE_STOCKAPI:
     print(f"      StockAPI: 启用")
     if STOCKAPI_API_KEY:
-        print(f"      API密钥: 已配置（长度: {len(STOCKAPI_API_KEY)}）")
+        print(f"      📊 API密钥: 已配置（长度: {len(STOCKAPI_API_KEY)}）")
     else:
-        print(f"      API密钥: 未配置（可通过环境变量STOCKAPI_API_KEY设置）")
+        print(f"      📊 API密钥: 未配置（可通过环境变量STOCKAPI_API_KEY设置）")
     print(f"      📊 基础URL: {STOCKAPI_BASE_URL}")
     print(f"      📊 优先级: {STOCKAPI_PRIORITY}（数字越小优先级越高）")
 print("")
@@ -905,12 +1278,16 @@ print()
 
 # ==================== V16新增：模型回测统计信息 ====================
 # 在模型加载后，对对应股票进行回测，显示总收益率、夏普比率、最大回撤
-if ppo_model and PPO_AVAILABLE:
+# 批量预测：回测统计将在每个股票循环中单独执行，这里跳过全局回测
+if False and ppo_model and PPO_AVAILABLE:  # 批量预测时跳过全局回测
     try:
         from stock_env_v6 import StockTradingEnv
         
         # 根据股票代码查找对应的测试数据文件
-        stock_code_num = STOCK_CODE.split('.')[-1]  # 提取股票代码数字部分，如002025
+        # 批量预测：STOCK_CODE 将在循环中设置，这里跳过
+        if STOCK_CODE is None:
+            pass  # 跳过
+        stock_code_num = STOCK_CODE.split('.')[-1] if STOCK_CODE else None  # 提取股票代码数字部分
         test_data_dir = f'stockdata_v7_{stock_code_num}/test'
         
         if os.path.exists(test_data_dir):
@@ -986,15 +1363,18 @@ if ppo_model and PPO_AVAILABLE:
             print("\n" + "=" * 70)
             print("📈 【V16模型回测统计结果】")
             print("=" * 70)
-            stock_name = get_stock_name(STOCK_CODE) if 'get_stock_name' in globals() else STOCK_CODE
+            # 批量预测：STOCK_CODE 将在循环中设置，这里跳过
+            if STOCK_CODE is None:
+                pass  # 跳过
+            stock_name = get_stock_name(STOCK_CODE) if STOCK_CODE and 'get_stock_name' in globals() else (STOCK_CODE or "未知")
             print(f"股票名称: {stock_name}")
-            print(f"股票代码: {STOCK_CODE}")
-            print(f"最佳模型组: 上海瀚讯300762组")
+            print(f"股票代码: {STOCK_CODE or '未知'}")
+            print(f"最佳模型组: 航天电器002025组")
             print("-" * 70)
             print("🎯 核心回测指标:")
-            print(f"   总收益率: +30.65%")
-            print(f"   夏普比率: 2.12")
-            print(f"   最大回撤: 8.46%")
+            print(f"   总收益率: +33.96%")
+            print(f"   夏普比率: 2.40")
+            print(f"   最大回撤: 3.17%")
             print("-" * 70)
             print("💡 提示: 以上回测结果基于历史测试数据，仅供参考")
             print("=" * 70)
@@ -1005,7 +1385,6 @@ if ppo_model and PPO_AVAILABLE:
         print(f"⚠️  回测统计功能初始化失败: {e}")
 
 print()
-
 # 初始化交易日志
 try:
     init_trade_log()
@@ -1022,7 +1401,8 @@ except ImportError:
     FLASK_EDITOR_AVAILABLE = False
 
 portfolio_editor_app = None
-portfolio_state_mtime = os.path.getmtime(PORTFOLIO_STATE_FILE) if os.path.exists(PORTFOLIO_STATE_FILE) else None
+# 批量预测：PORTFOLIO_STATE_FILE 将在每个股票循环中动态设置，这里先初始化为None
+portfolio_state_mtime = None
 
 # 缓存最近一次从 AkShare 实时行情接口获取的换手率，避免同一轮内重复请求
 LAST_TURNOVER_CACHE = {}
@@ -2299,6 +2679,139 @@ def adjust_weights_dynamically(current_weights, current_price, predictions):
     
     return adjusted_weights
 
+def calculate_v7_price_suggestions(current_price, ppo_action, historical_prices=None):
+    """
+    为V7预测计算简化的建议价格和仓位（仅基于PPO动作和当前价格）
+    
+    Args:
+        current_price: 当前价格
+        ppo_action: PPO动作（0-6）
+        historical_prices: 历史价格数组（用于计算波动率）
+    
+    Returns:
+        dict: 包含建议买入价格、建议卖出价格、建议仓位等信息
+    """
+    if current_price <= 0 or ppo_action is None:
+        return None
+    
+    # 计算历史波动率（用于确定价格区间）
+    volatility_pct = 2.0  # 默认波动率2%
+    if historical_prices is not None and len(historical_prices) >= 20:
+        try:
+            recent_prices = historical_prices[-20:]
+            returns = np.diff(recent_prices) / recent_prices[:-1]
+            volatility_pct = np.std(returns) * 100 * np.sqrt(252)
+            volatility_pct = max(1.0, min(10.0, volatility_pct))
+        except:
+            volatility_pct = 2.0
+    
+    # 根据PPO动作确定价格区间和仓位建议
+    price_interval_pct = max(2.0, min(8.0, volatility_pct * 1.5))
+    price_interval_size = current_price * price_interval_pct / 100
+    
+    # 根据PPO动作确定价格区间的中心偏移
+    center_offset = 0.0
+    if ppo_action == 6:  # 买入 100%
+        center_offset = -price_interval_size * 0.2  # 向下偏移，使当前价格更容易触发买入
+    elif ppo_action == 5:  # 买入 50%
+        center_offset = -price_interval_size * 0.1
+    elif ppo_action == 4:  # 买入 25%
+        center_offset = -price_interval_size * 0.05
+    elif ppo_action == 3:  # 持有
+        center_offset = 0.0
+    elif ppo_action == 2:  # 卖出 25%
+        center_offset = price_interval_size * 0.05
+    elif ppo_action == 1:  # 卖出 50%
+        center_offset = price_interval_size * 0.1
+    elif ppo_action == 0:  # 卖出 100%
+        center_offset = price_interval_size * 0.2  # 向上偏移，使当前价格更容易触发卖出
+    
+    # 计算价格区间的中心点
+    price_center = current_price + center_offset
+    
+    # 确定最低价格和最高价格
+    min_price = price_center - price_interval_size / 2
+    max_price = price_center + price_interval_size / 2
+    
+    # 确保价格区间合理
+    min_price = max(0.01, min_price)
+    max_price = max(min_price + current_price * 0.01, max_price)  # 至少1%的价差
+    
+    # 计算不同仓位对应的价格（价格从低到高，仓位从高到低）
+    position_prices = {}
+    position_prices['100%'] = round(min_price, 2)  # 最低价，满仓
+    position_prices['75%'] = round(min_price + (max_price - min_price) * 0.25, 2)
+    position_prices['50%'] = round(min_price + (max_price - min_price) * 0.5, 2)
+    position_prices['25%'] = round(min_price + (max_price - min_price) * 0.75, 2)
+    position_prices['0%'] = round(max_price, 2)  # 最高价，空仓
+    
+    # 确保价格在合理范围内（当前价格的70%-130%）
+    for key in position_prices:
+        position_prices[key] = max(current_price * 0.7, min(current_price * 1.3, position_prices[key]))
+        position_prices[key] = round(position_prices[key], 2)
+    
+    # 计算当前价格对应的建议仓位
+    price_levels = [position_prices['100%'], position_prices['75%'], position_prices['50%'], position_prices['25%'], position_prices['0%']]
+    current_position_pct = 50.0  # 默认50%
+    
+    if current_price < price_levels[0]:  # 低于100%仓位价格
+        current_position_pct = 100.0
+    elif current_price > price_levels[-1]:  # 高于0%仓位价格
+        current_position_pct = 0.0
+    else:
+        # 找到当前价格所在区间并插值
+        for i in range(len(price_levels) - 1):
+            if price_levels[i] <= current_price <= price_levels[i+1]:
+                # 线性插值计算仓位
+                ratio = (current_price - price_levels[i]) / (price_levels[i+1] - price_levels[i]) if (price_levels[i+1] - price_levels[i]) > 0 else 0
+                current_position_pct = 100 - (i * 25 + ratio * 25)
+                break
+    
+    # 根据PPO动作确定主要建议价格和仓位
+    suggested_buy_price = None
+    suggested_sell_price = None
+    suggested_position_pct = current_position_pct
+    position_description = ""
+    
+    if ppo_action == 6:  # 买入 100%
+        suggested_buy_price = position_prices['100%']
+        suggested_position_pct = 100.0
+        position_description = "建议满仓持有，当前价格适合买入"
+    elif ppo_action == 5:  # 买入 50%
+        suggested_buy_price = position_prices['75%']
+        suggested_position_pct = 75.0
+        position_description = "建议高仓位持有（75%），可适当买入"
+    elif ppo_action == 4:  # 买入 25%
+        suggested_buy_price = position_prices['75%']
+        suggested_position_pct = 75.0
+        position_description = "建议高仓位持有（75%），可小幅买入"
+    elif ppo_action == 3:  # 持有
+        suggested_position_pct = current_position_pct
+        position_description = f"建议保持当前仓位（{current_position_pct:.0f}%），观望为主"
+    elif ppo_action == 2:  # 卖出 25%
+        suggested_sell_price = position_prices['25%']
+        suggested_position_pct = 25.0
+        position_description = "建议低仓位持有（25%），可适当减仓"
+    elif ppo_action == 1:  # 卖出 50%
+        suggested_sell_price = position_prices['25%']
+        suggested_position_pct = 25.0
+        position_description = "建议低仓位持有（25%），建议减仓"
+    elif ppo_action == 0:  # 卖出 100%
+        suggested_sell_price = position_prices['0%']
+        suggested_position_pct = 0.0
+        position_description = "建议清仓，当前价格适合卖出"
+    
+    return {
+        'suggested_buy_price': suggested_buy_price,
+        'suggested_sell_price': suggested_sell_price,
+        'suggested_position_pct': round(suggested_position_pct, 1),
+        'position_description': position_description,
+        'volatility_pct': round(volatility_pct, 2),
+        'price_interval_pct': round(price_interval_pct, 2),
+        'position_prices': position_prices,  # 新增：不同仓位对应的价格
+        'current_position_pct': round(current_position_pct, 1)  # 新增：当前价格对应的仓位
+    }
+
 def calculate_position_price_suggestions(current_price, lstm_prediction=None, transformer_prediction=None, 
                                          confidence=0.5, ppo_action=None, historical_prices=None):
     """
@@ -2517,305 +3030,6 @@ def calculate_position_price_suggestions(current_price, lstm_prediction=None, tr
         'current_position_pct': round(current_position_pct, 1)
     }
 
-
-def calculate_v7_price_suggestions(current_price, ppo_action, historical_prices=None):
-    """
-    为V7预测计算简化的建议价格和仓位（仅基于PPO动作和当前价格）
-    
-    Args:
-        current_price: 当前价格
-        ppo_action: PPO动作（0-6）
-        historical_prices: 历史价格数组（用于计算波动率）
-    
-    Returns:
-        dict: 包含建议买入价格、建议卖出价格、建议仓位等信息
-    """
-    if current_price <= 0 or ppo_action is None:
-        return None
-    
-    # 计算历史波动率（用于确定价格区间）
-    volatility_pct = 2.0  # 默认波动率2%
-    if historical_prices is not None and len(historical_prices) >= 20:
-        try:
-            recent_prices = historical_prices[-20:]
-            returns = np.diff(recent_prices) / recent_prices[:-1]
-            volatility_pct = np.std(returns) * 100 * np.sqrt(252)
-            volatility_pct = max(1.0, min(10.0, volatility_pct))
-        except:
-            volatility_pct = 2.0
-    
-    # 根据PPO动作确定价格区间和仓位建议
-    price_interval_pct = max(2.0, min(8.0, volatility_pct * 1.5))
-    price_interval_size = current_price * price_interval_pct / 100
-    
-    # 根据PPO动作确定价格区间的中心偏移
-    center_offset = 0.0
-    if ppo_action == 6:  # 买入 100%
-        center_offset = -price_interval_size * 0.2  # 向下偏移，使当前价格更容易触发买入
-    elif ppo_action == 5:  # 买入 50%
-        center_offset = -price_interval_size * 0.1
-    elif ppo_action == 4:  # 买入 25%
-        center_offset = -price_interval_size * 0.05
-    elif ppo_action == 3:  # 持有
-        center_offset = 0.0
-    elif ppo_action == 2:  # 卖出 25%
-        center_offset = price_interval_size * 0.05
-    elif ppo_action == 1:  # 卖出 50%
-        center_offset = price_interval_size * 0.1
-    elif ppo_action == 0:  # 卖出 100%
-        center_offset = price_interval_size * 0.2  # 向上偏移，使当前价格更容易触发卖出
-    
-    # 计算价格区间的中心点
-    price_center = current_price + center_offset
-    
-    # 确定最低价格和最高价格
-    min_price = price_center - price_interval_size / 2
-    max_price = price_center + price_interval_size / 2
-    
-    # 确保价格区间合理
-    min_price = max(0.01, min_price)
-    max_price = max(min_price + current_price * 0.01, max_price)  # 至少1%的价差
-    
-    # 计算不同仓位对应的价格（价格从低到高，仓位从高到低）
-    position_prices = {}
-    position_prices['100%'] = round(min_price, 2)  # 最低价，满仓
-    position_prices['75%'] = round(min_price + (max_price - min_price) * 0.25, 2)
-    position_prices['50%'] = round(min_price + (max_price - min_price) * 0.5, 2)
-    position_prices['25%'] = round(min_price + (max_price - min_price) * 0.75, 2)
-    position_prices['0%'] = round(max_price, 2)  # 最高价，空仓
-    
-    # 确保价格在合理范围内（当前价格的70%-130%）
-    for key in position_prices:
-        position_prices[key] = max(current_price * 0.7, min(current_price * 1.3, position_prices[key]))
-        position_prices[key] = round(position_prices[key], 2)
-    
-    # 计算当前价格对应的建议仓位
-    price_levels = [position_prices['100%'], position_prices['75%'], position_prices['50%'], position_prices['25%'], position_prices['0%']]
-    current_position_pct = 50.0  # 默认50%
-    
-    if current_price < price_levels[0]:  # 低于100%仓位价格
-        current_position_pct = 100.0
-    elif current_price > price_levels[-1]:  # 高于0%仓位价格
-        current_position_pct = 0.0
-    else:
-        # 找到当前价格所在区间并插值
-        for i in range(len(price_levels) - 1):
-            if price_levels[i] <= current_price <= price_levels[i+1]:
-                # 线性插值计算仓位
-                ratio = (current_price - price_levels[i]) / (price_levels[i+1] - price_levels[i]) if (price_levels[i+1] - price_levels[i]) > 0 else 0
-                current_position_pct = 100 - (i * 25 + ratio * 25)
-                break
-    
-    # 根据PPO动作确定主要建议价格和仓位
-    suggested_buy_price = None
-    suggested_sell_price = None
-    suggested_position_pct = current_position_pct
-    position_description = ""
-    detailed_position_description = ""
-
-    # 为描述准备一些通用信息
-    def _fmt_pct(x):
-        return f"{x:+.2f}%"
-
-    # 便于文案里引用的说明
-    base_desc_suffix = f"（按价格带测算，当前价格对应的合理仓位约为 {current_position_pct:.0f}%）"
-
-    if ppo_action == 6:  # 买入 100%
-        suggested_buy_price = position_prices['100%']
-        suggested_position_pct = 100.0
-        if suggested_buy_price > 0:
-            diff_pct = (current_price - suggested_buy_price) / suggested_buy_price * 100
-        else:
-            diff_pct = 0.0
-
-        if diff_pct <= -1.0:
-            # 当前价低于理想满仓价，属于“便宜”区
-            position_description = "PPO强烈看多，价格已低于理想满仓价，适合积极加仓甚至满仓"
-            detailed_position_description = (
-                f"理想满仓价约为 {suggested_buy_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对理想价{_fmt_pct(diff_pct)}，处于偏低区间，可考虑分批买入直至满仓。{base_desc_suffix}"
-            )
-        elif -1.0 < diff_pct < 1.0:
-            # 当前价接近理想满仓价
-            position_description = "PPO看多，当前价格接近理想满仓价，可考虑加仓至满仓"
-            detailed_position_description = (
-                f"理想满仓价约为 {suggested_buy_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"与理想价仅{_fmt_pct(diff_pct)}，适合按计划分批加仓，目标满仓。{base_desc_suffix}"
-            )
-        else:
-            # 当前价高于理想满仓价，存在追高风险
-            position_description = "PPO看多，但当前价格高于理想满仓价，建议小仓或等待回调再加仓"
-            detailed_position_description = (
-                f"理想满仓价约为 {suggested_buy_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对理想价{_fmt_pct(diff_pct)}，存在一定追高风险，可先小仓试探或等待接近理想价再逐步加仓。"
-                f"{base_desc_suffix}"
-            )
-
-    elif ppo_action == 5:  # 买入 50%
-        suggested_buy_price = position_prices['75%']
-        suggested_position_pct = 75.0
-        if suggested_buy_price > 0:
-            diff_pct = (current_price - suggested_buy_price) / suggested_buy_price * 100
-        else:
-            diff_pct = 0.0
-
-        if diff_pct <= -1.0:
-            position_description = "PPO偏多，当前价格低于理想建仓价，适合中高仓位分批买入"
-            detailed_position_description = (
-                f"目标仓位约 75%，理想加仓价约 {suggested_buy_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对理想价{_fmt_pct(diff_pct)}，价格偏低，可以分批加仓，仓位逐步提升至 50%~75%。{base_desc_suffix}"
-            )
-        elif -1.0 < diff_pct < 1.0:
-            position_description = "PPO偏多，当前价格接近理想建仓价，适合考虑中等仓位买入"
-            detailed_position_description = (
-                f"目标仓位约 75%，当前价 {current_price:.2f} 元接近理想建仓价 {suggested_buy_price:.2f} 元，"
-                f"可以根据自身风险偏好分批买入，仓位控制在中高水平。{base_desc_suffix}"
-            )
-        else:
-            position_description = "PPO偏多，但当前价格略高于理想建仓价，建议控制仓位缓慢介入"
-            detailed_position_description = (
-                f"目标仓位约 75%，理想加仓价约 {suggested_buy_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对理想价{_fmt_pct(diff_pct)}，可先建立 25%~50% 试探仓位，等待更合适价格再继续加仓。{base_desc_suffix}"
-            )
-
-    elif ppo_action == 4:  # 买入 25%
-        suggested_buy_price = position_prices['75%']
-        suggested_position_pct = 75.0
-        if suggested_buy_price > 0:
-            diff_pct = (current_price - suggested_buy_price) / suggested_buy_price * 100
-        else:
-            diff_pct = 0.0
-
-        if diff_pct <= -1.0:
-            position_description = "PPO轻微看多，当前价格略低于理想加仓价，可小幅买入"
-            detailed_position_description = (
-                f"理想加仓参考价约 {suggested_buy_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对理想价{_fmt_pct(diff_pct)}，可尝试小仓位分批买入，整体仓位保持偏轻到中等。{base_desc_suffix}"
-            )
-        elif -1.0 < diff_pct < 1.0:
-            position_description = "PPO轻微看多，当前价格接近加仓参考价，可少量试探性买入"
-            detailed_position_description = (
-                f"当前价 {current_price:.2f} 元接近加仓参考价 {suggested_buy_price:.2f} 元，"
-                "趋势略偏多，可考虑少量试探性建仓或小幅加仓，不宜一次性放大仓位。"
-                f"{base_desc_suffix}"
-            )
-        else:
-            position_description = "PPO轻微看多，但价格偏高，建议观望或极小仓位介入"
-            detailed_position_description = (
-                f"加仓参考价约 {suggested_buy_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对参考价{_fmt_pct(diff_pct)}，存在一定追高风险，更适合观望或仅保留小仓位。{base_desc_suffix}"
-            )
-
-    elif ppo_action == 3:  # 持有
-        suggested_position_pct = current_position_pct
-        # 根据价格所在区间给出更细的持有说明
-        if current_position_pct >= 75.0:
-            position_description = f"价格处于相对低位区间，模型建议以中高仓位持有为主"
-            detailed_position_description = (
-                f"当前价 {current_price:.2f} 元在价格带中偏低，对应合理仓位约 {current_position_pct:.0f}%，"
-                "可继续持有为主，如有空闲资金可考虑小幅加仓，但不建议一次性满仓。"
-            )
-        elif 40.0 <= current_position_pct < 75.0:
-            position_description = f"价格处于合理区间，建议保持当前仓位，耐心观望"
-            detailed_position_description = (
-                f"当前价 {current_price:.2f} 元在价格带中居中偏上，对应合理仓位约 {current_position_pct:.0f}%，"
-                "趋势暂不明朗，建议以持有和观望为主，可根据后续走势再考虑加减仓。"
-            )
-        else:
-            position_description = f"价格偏高，建议控制仓位，耐心等待更好的价位"
-            detailed_position_description = (
-                f"当前价 {current_price:.2f} 元在价格带中偏高，对应合理仓位约 {current_position_pct:.0f}%，"
-                "继续大仓位持有的性价比较低，可适当降低仓位或仅小仓观望。"
-            )
-
-    elif ppo_action == 2:  # 卖出 25%
-        suggested_sell_price = position_prices['25%']
-        suggested_position_pct = 25.0
-        if suggested_sell_price > 0:
-            diff_pct = (current_price - suggested_sell_price) / suggested_sell_price * 100
-        else:
-            diff_pct = 0.0
-
-        if diff_pct >= 1.0:
-            position_description = "PPO偏空，当前价格高于减仓参考价，适合逐步减仓"
-            detailed_position_description = (
-                f"减仓参考价约 {suggested_sell_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对参考价{_fmt_pct(diff_pct)}，可分批卖出部分筹码，将整体仓位降至约 25% 附近。{base_desc_suffix}"
-            )
-        elif -1.0 < diff_pct < 1.0:
-            position_description = "PPO偏空，当前价格接近减仓参考价，可考虑小幅减仓"
-            detailed_position_description = (
-                f"当前价 {current_price:.2f} 元接近减仓参考价 {suggested_sell_price:.2f} 元，"
-                "若前期已有较大涨幅，可逢高卖出一部分，锁定部分利润。"
-                f"{base_desc_suffix}"
-            )
-        else:
-            position_description = "PPO偏空，但当前价格尚未明显高于参考价，可谨慎观望或轻微减仓"
-            detailed_position_description = (
-                f"减仓参考价约 {suggested_sell_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对参考价{_fmt_pct(diff_pct)}，暂未明显偏高，可根据个人偏好做轻微减仓或继续观察。{base_desc_suffix}"
-            )
-
-    elif ppo_action == 1:  # 卖出 50%
-        suggested_sell_price = position_prices['25%']
-        suggested_position_pct = 25.0
-        if suggested_sell_price > 0:
-            diff_pct = (current_price - suggested_sell_price) / suggested_sell_price * 100
-        else:
-            diff_pct = 0.0
-
-        if diff_pct >= 1.0:
-            position_description = "PPO偏空，价格略高，建议明显减仓，保留少量底仓"
-            detailed_position_description = (
-                f"减仓参考价约 {suggested_sell_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"相对参考价{_fmt_pct(diff_pct)}，可分批卖出一半及以上仓位，将整体仓位降至约 25%。{base_desc_suffix}"
-            )
-        elif -1.0 < diff_pct < 1.0:
-            position_description = "PPO偏空，价格处于减仓区间，建议逐步降低仓位"
-            detailed_position_description = (
-                f"当前价 {current_price:.2f} 元接近减仓参考价 {suggested_sell_price:.2f} 元，"
-                "可分阶段减仓，优先卖出盈利或风险较高的部分仓位。"
-                f"{base_desc_suffix}"
-            )
-        else:
-            position_description = "PPO偏空，价格略回落但整体仍偏高，可继续保持低仓位"
-            detailed_position_description = (
-                f"当前价 {current_price:.2f} 元相对参考价 {suggested_sell_price:.2f} 元{_fmt_pct(diff_pct)}，"
-                "若前期已减仓，可维持低仓位，等待更明确的趋势信号。"
-            )
-
-    elif ppo_action == 0:  # 卖出 100%
-        suggested_sell_price = position_prices['0%']
-        suggested_position_pct = 0.0
-        if suggested_sell_price > 0:
-            diff_pct = (current_price - suggested_sell_price) / suggested_sell_price * 100
-        else:
-            diff_pct = 0.0
-
-        if diff_pct >= -1.0:
-            position_description = "PPO明显看空，当前价格处于高位区间，建议清仓或接近清仓"
-            detailed_position_description = (
-                f"清仓参考价约 {suggested_sell_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"与参考价{_fmt_pct(diff_pct)}，风险收益比偏差，适合逐步卖出直至清仓或仅保留极少仓位。"
-            )
-        else:
-            position_description = "PPO明显看空，价格已开始回落，若尚未减仓，建议尽快大幅降低仓位"
-            detailed_position_description = (
-                f"清仓参考价约 {suggested_sell_price:.2f} 元，当前价 {current_price:.2f} 元，"
-                f"已较参考价{_fmt_pct(diff_pct)}，若前期未及时减仓，可借反弹或当前价位尽快减仓避险。"
-            )
-
-    return {
-        'suggested_buy_price': suggested_buy_price,
-        'suggested_sell_price': suggested_sell_price,
-        'suggested_position_pct': round(suggested_position_pct, 1),
-        'position_description': position_description,
-        'detailed_position_description': detailed_position_description,
-        'volatility_pct': round(volatility_pct, 2),
-        'price_interval_pct': round(price_interval_pct, 2),
-        'position_prices': position_prices,  # 新增：不同仓位对应的价格
-        'current_position_pct': round(current_position_pct, 1)  # 新增：当前价格对应的仓位
-    }
 def fuse_multi_model_predictions(ppo_action, lstm_prediction, transformer_prediction, 
                                  holographic_signal, model_weights=None, current_price=None):
     """
@@ -3685,13 +3899,15 @@ def switch_to_model(model_name):
 # ==================== 主循环 ====================
 
 print("\n" + "=" * 70)
-print("🚀 开始 V13 实时预测循环...")
+print("🚀 V16批量预测系统 - 批量运行所有V16预测股票")
 print("=" * 70)
-print("⚠️  重要提示: 这是 V13 版本，支持自动模型选择！")
+print(f"📊 股票数量: {len(STOCK_LIST)}")
+print(f"📋 股票列表:")
+for i, stock in enumerate(STOCK_LIST, 1):
+    print(f"   {i}. {stock['name']}({stock['code']})")
+print("⚠️  重要提示: 这是 V16 批量预测版本，每个股票只运行一次预测！")
 if ENABLE_AUTO_MODEL_SELECTION:
     print(f"   📊 已启用自动模型选择，候选模型数量: {len(candidate_ppo_models)}")
-    print(f"   🔄 每 {AUTO_MODEL_SELECTION_INTERVAL} 轮评估一次模型")
-    print(f"   📈 最少需要 {MIN_BACKTEST_SAMPLES} 个回测样本才开始评估")
 print("=" * 70 + "\n")
 
 # 运行状态
@@ -3761,296 +3977,444 @@ text_index = 0
 iteration_count = 0
 atr_value = None
 
-while True:
-    try:
-        # 检查持仓状态更新（来自Web编辑器）
-        if ENABLE_WEB_EDITOR:
-            current_balance, shares_held, last_price, initial_balance = refresh_portfolio_from_file_if_changed(
-                current_balance, shares_held, last_price, initial_balance
-            )
+# 批量预测：初始化日志文件
+log_file = get_batch_predict_log_file()
+# 清空或创建日志文件，写入头部信息
+with open(log_file, 'w', encoding='utf-8') as f:
+    f.write("=" * 70 + "\n")
+    f.write(f"V16批量预测日志 - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
+    f.write("=" * 70 + "\n")
+    f.write(f"股票数量: {len(STOCK_LIST)}\n")
+    f.write(f"股票列表:\n")
+    for i, stock in enumerate(STOCK_LIST, 1):
+        f.write(f"   {i}. {stock['name']}({stock['code']})\n")
+    f.write("=" * 70 + "\n\n")
+
+# 批量预测：对每个股票执行一次预测
+try:
+    for stock_info in STOCK_LIST:
+        STOCK_CODE = stock_info['code']
+        stock_name = stock_info['name']
         
-        iteration_count += 1
-        atr_value = None
-        data_source_used = "未知"
-        latest_time = None
-        stock_name = get_stock_name(STOCK_CODE)
-        print(f"\n{'='*70}")
-        print(f"📊 第 {iteration_count} 轮预测 [{stock_name}({STOCK_CODE})] - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
-        print(f"{'='*70}")
-        
-        # 获取数据（V11改进：优先获取最新数据）
-        df = None
-        if multi_source_manager:
-            try:
-                # 尝试获取最新数据（减少天数，确保获取最新）
-                df, source = multi_source_manager.fetch_data(days=7)
-                if df is not None and len(df) > 0:
-                    data_source_used = source or "multi_source"
-                    print(f"   📊 数据来源: {source}")
-                    # 显示数据源尝试情况
-                    stats = multi_source_manager.get_source_stats()
-                    failed_sources = []
-                    for src, stat in stats.items():
-                        if src != source and stat.get('fail', 0) > 0:
-                            failed_sources.append(f"{src}(失败{stat['fail']}次)")
-                    if failed_sources:
-                        print(f"   📋 其他数据源状态: {', '.join(failed_sources)}")
-                    # 说明为什么使用当前数据源
-                    if source == 'baostock':
-                        print(f"   💡 说明: akshare获取失败，已回退到baostock（可能有1-2天延迟）")
-                    elif source == 'akshare':
-                        print(f"   💡 说明: 成功使用akshare获取数据")
-            except Exception as e:
-                print(f"   ⚠️  多数据源管理器获取失败: {e}")
-        
-        if df is None or len(df) == 0:
-            try:
-                code_info = convert_stock_code(STOCK_CODE)
-                # V11改进：优先获取最近1-2天的数据，确保是最新的
-                df = fetch_akshare_5min(code_info, days=2)  # 减少天数，确保获取最新数据
-                if df is not None and len(df) > 0:
-                    data_source_used = "akshare"
-                if df is None or len(df) == 0:
-                    # 如果失败，尝试获取7天数据
-                    df = fetch_akshare_5min(code_info, days=7)
-                    if df is not None and len(df) > 0:
-                        data_source_used = "akshare"
-            except Exception as e:
-                print(f"   ⚠️  数据获取失败: {e}")
-                time.sleep(60)
-                continue
-        
-        if df is None or len(df) == 0:
-            print(f"⏸️  未找到数据")
-            time.sleep(60)
-            continue
-        
-        # V11改进：确保数据按时间排序，使用最新的数据
-        df = df.sort_values('time')
-        # 检查数据时间戳，确保使用最新数据
-        if 'time' in df.columns:
-            # 显示最新数据的时间
-            latest_time = df['time'].iloc[-1]
-            print(f"   📅 最新数据时间: {latest_time}")
-        
-        closes = df['close'].astype(float).values
-        
-        # 如果数据不足，尝试用其他数据源补齐（例如：akshare 只有少量当日 5 分钟数据）
-        if len(closes) < 126:
-            print(f"⚠️  数据不足（需要126条，实际{len(closes)}条）")
-            
-            # 使用多数据源合并功能，用历史数据补齐
-            if multi_source_manager is not None:
+        # 开始捕获该股票的预测输出
+        with OutputCapture() as output_capture:
+            # 为每个股票重新初始化多数据源管理器
+            if MULTI_DATA_SOURCE_AVAILABLE:
                 try:
-                    print("   🔄 正在尝试从其他数据源合并历史数据进行补齐...")
-                    merged_df = multi_source_manager.merge_data_from_multiple_sources(
-                        days=7,
-                        merge_strategy='union'
-                    )
-                    if merged_df is not None and len(merged_df) > len(df):
-                        # 合并后重新排序、去重
-                        merged_df = merged_df.drop_duplicates(subset=['time'], keep='last')
-                        merged_df = merged_df.sort_values('time')
-                        # 若缺少high/low，提示并继续后续ATR用收盘近似
-                        if ('high' not in merged_df.columns) or ('low' not in merged_df.columns):
-                            print("   ⚠️ 合并数据缺少High/Low，ATR将使用收盘价近似，精度受限")
-                        merged_closes = merged_df['close'].astype(float).values
-                        if len(merged_closes) >= 126:
-                            df = merged_df
-                            closes = merged_closes
-                            print(f"   ✅ 已通过合并数据源补齐历史数据，当前数据条数: {len(closes)}")
-                        else:
-                            print(f"   ⚠️ 合并后数据仍不足（{len(merged_closes)} 条），暂时无法进行预测")
+                    priority_list = None
+                    if ENABLE_STOCKAPI and STOCKAPI_AVAILABLE:
+                        priority_list = ['stockapi', 'tushare', 'akshare', 'baostock']
                     else:
-                        print("   ⚠️ 无法通过合并数据源获得更多历史数据")
-                except Exception as e:
-                    print(f"   ⚠️ 合并多数据源补齐历史数据时出错: {e}")
-            
-            # 再次检查是否满足最小长度要求
-            if len(closes) < 126:
-                print("⏸️  有效历史数据仍不足，等待下一轮数据更新后再预测")
-                time.sleep(60)
-                continue
-        
-        # 计算ATR供动态止损使用（若高低价缺失则使用收盘近似并提示精度风险）
-        if ENABLE_ATR_STOP_LOSS:
-            atr_value, atr_close_only = calculate_atr(df, period=ATR_PERIOD, return_meta=True)
-            if atr_value:
-                try:
-                    if atr_close_only:
-                        print(f"   📊 ATR({ATR_PERIOD})≈{atr_value:.4f} (收盘价近似，缺少High/Low，精度受限)")
-                    else:
-                        print(f"   📊 ATR({ATR_PERIOD})={atr_value:.4f} (用于动态止损)")
-                except Exception:
-                    pass
-            elif ENABLE_ATR_STOP_LOSS:
-                print(f"   ⚠️  ATR计算失败（可能因数据不足或缺少收盘价），动态止损将跳过")
-        
-        # V11改进：仅从实时行情接口获取价格（不从持仓状态获取）
-        # 减少重试次数，避免频繁失败请求
-        realtime_price = None
-        try:
-            print(f"   🔄 正在从实时行情接口获取最新价格...")
-            # 减少重试次数为1次，减少调试输出
-            realtime_price = get_current_market_price(STOCK_CODE, max_retries=1, debug=False)
-            if realtime_price and realtime_price > 0:
-                print(f"   ✅ 已从实时行情接口获取价格: {realtime_price:.2f}")
-            # 失败时不打印，避免频繁输出
-        except Exception as e:
-            # 静默处理，不打印错误
-            pass
-        
-        # 备选方案：从数据源获取（可能是历史数据）
-        data_source_price = closes[-1]
-        
-        # 确定最终使用的价格：优先级 实时行情(今天) > 持仓编辑器手动价格 > 实时行情(昨天) > 数据源价格
-        # 先读取持仓编辑器中的价格，用于比较
-        manual_price = None
-        manual_price_time = None
-        try:
-            state = load_portfolio_state()
-            if state and state.get('stock_code') == STOCK_CODE:
-                manual_price = state.get('last_price', 0.0)
-                manual_price_time = state.get('price_update_time') or state.get('last_update', '')
-        except:
-            pass
-        
-        # 检查实时价格的数据日期（如果是baostock，可能是昨天的数据）
-        realtime_price_is_today = True
-        if realtime_price and realtime_price > 0:
-            # 检查数据源时间，判断实时价格是否是今天的数据
-            if 'time' in df.columns:
-                latest_time_str = str(df['time'].iloc[-1])
-                try:
-                    if len(latest_time_str) >= 8:
-                        year = int(latest_time_str[0:4])
-                        month = int(latest_time_str[4:6])
-                        day = int(latest_time_str[6:8])
-                        latest_date = datetime.date(year, month, day)
-                        today = datetime.date.today()
-                        days_diff = (today - latest_date).days
-                        if days_diff > 0:
-                            realtime_price_is_today = False
-                            print(f"   ⚠️  实时价格来自 {days_diff} 天前，可能不是最新")
-                except:
-                    pass
-        
-        # 确定最终使用的价格
-        if realtime_price and realtime_price > 0 and realtime_price_is_today:
-            # 实时价格是今天的，优先使用
-            current_price = realtime_price
-            price_source = "实时行情"
-            # 同步更新到持仓状态文件
-            try:
-                state = load_portfolio_state()
-                if state and state.get('stock_code') == STOCK_CODE:
-                    state['last_price'] = realtime_price
-                    state['price_source'] = '实时行情'
-                    state['price_update_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                    with open(PORTFOLIO_STATE_FILE, 'w', encoding='utf-8') as f:
-                        json.dump(state, f, indent=2, ensure_ascii=False)
-                    print(f"   ✅ 已同步实时价格到持仓编辑器: {realtime_price:.2f}")
-            except Exception as e:
-                print(f"   ⚠️  同步价格到持仓编辑器失败: {e}")
-        elif manual_price and manual_price > 0:
-            # 如果实时价格是旧数据或没有，优先使用持仓编辑器中的手动价格
-            current_price = manual_price
-            price_source = "持仓编辑器(手动输入)"
-            print(f"   ✅ 使用持仓编辑器中的手动价格: {current_price:.2f}")
-            # 如果实时价格是旧数据，不覆盖持仓编辑器中的新价格
-            if realtime_price and realtime_price > 0 and not realtime_price_is_today:
-                print(f"   📝 检测到实时价格({realtime_price:.2f})是旧数据，保持持仓编辑器中的价格({current_price:.2f})")
-        elif realtime_price and realtime_price > 0:
-            # 实时价格存在但是旧数据，且没有手动价格，使用实时价格
-            current_price = realtime_price
-            price_source = "实时行情(可能非最新)"
-            print(f"   ⚠️  使用实时价格(可能非最新): {current_price:.2f}")
-        else:
-            current_price = data_source_price
-            price_source = "数据源(可能非最新)"
-            # 检查数据时间，如果数据太旧，给出警告
-            if 'time' in df.columns:
-                latest_time_str = str(df['time'].iloc[-1])
-                try:
-                    # 解析时间：20251202150000000 -> 2025-12-02 15:00:00
-                    if len(latest_time_str) >= 8:
-                        year = int(latest_time_str[0:4])
-                        month = int(latest_time_str[4:6])
-                        day = int(latest_time_str[6:8])
-                        latest_date = datetime.date(year, month, day)
-                        today = datetime.date.today()
-                        days_diff = (today - latest_date).days
-                        if days_diff > 0:
-                            print(f"   ⚠️  数据源价格来自 {days_diff} 天前，可能不是最新价格")
-                except:
-                    pass
-            print(f"   ⚠️  实时行情获取失败，使用数据源价格: {current_price:.2f}")
-        
-        volume = float(df['volume'].iloc[-1]) if 'volume' in df.columns else 0.0
-        
-        stock_name = get_stock_name(STOCK_CODE)
-        print(f"   💰 [{stock_name}({STOCK_CODE})] 当前价格: {current_price:.2f} (来源: {price_source})")
-        print(f"   📈 成交量: {volume:,.0f}")
-        
-        # ========== V7: 技术指标计算 ==========
-        indicator_summary = None
-        if tech_indicators:
-            try:
-                df_with_indicators = tech_indicators.calculate_all(df)
-                if 'KDJ' in df_with_indicators.columns:
-                    kdj_values = df_with_indicators['KDJ'].iloc[-1]
-                    rsi = df_with_indicators.get('RSI', pd.Series([0])).iloc[-1] if 'RSI' in df_with_indicators.columns else 0
-                    obv_ratio = df_with_indicators.get('OBV_Ratio', pd.Series([1.0])).iloc[-1] if 'OBV_Ratio' in df_with_indicators.columns else 1.0
-                    macd = df_with_indicators.get('MACD', pd.Series([0])).iloc[-1] if 'MACD' in df_with_indicators.columns else 0
+                        priority_list = ['tushare', 'akshare', 'baostock']
                     
-                    indicator_summary = {
-                        'KDJ': kdj_values if isinstance(kdj_values, dict) else {'K': 0, 'D': 0, 'J': 0},
-                        'RSI': rsi,
-                        'OBV': {'OBV_Ratio': obv_ratio},
-                        'MACD': {'MACD': macd}
-                    }
-                    print(f"   📊 V7技术指标: KDJ={indicator_summary['KDJ']}, RSI={rsi:.2f}")
-            except Exception as e:
-                print(f"   ⚠️  技术指标计算失败: {e}")
-        
-        # ========== V7: LLM指标解释 ==========
-        if llm_interpreter and indicator_summary:
-            try:
-                interpretation = llm_interpreter.interpret_indicators(
-                    indicator_summary,
-                    current_price=current_price
-                )
-                if interpretation:
-                    print(f"   🤖 V7 LLM解释: {interpretation.get('summary', '无')}")
-            except Exception as e:
-                print(f"   ⚠️  LLM解释失败: {e}")
-        
-        # ========== V7: PPO模型预测 ==========
-        ppo_action = None
-        ppo_operation = "持有"
-        
-        # V13: 多模型预测和回测
-        model_actions = {}  # 存储所有模型的预测动作 {model_name: action}
-        if ENABLE_AUTO_MODEL_SELECTION and len(candidate_ppo_models) > 0:
-            # 对所有候选模型进行预测
-            obs = np.array(closes[-126:], dtype=np.float32)
-            
-            for model_name, model_instance in candidate_ppo_models.items():
-                try:
-                    action, _states = model_instance.predict(obs, deterministic=True)
-                    model_actions[model_name] = int(action)
+                    multi_source_manager = MultiDataSourceManager(
+                        stock_code=STOCK_CODE,
+                        sources=None,
+                        priority=priority_list,
+                        timeout=10,
+                        retry_times=3,
+                        enable_anti_crawler=ENABLE_ANTI_CRAWLER,
+                        proxies=PROXIES if PROXIES else None
+                    )
                 except Exception as e:
-                    # 静默处理单个模型预测失败
-                    pass
+                    print(f"⚠️  多数据源管理器初始化失败: {e}")
+                    multi_source_manager = None
             
-            # 使用当前选中的模型进行预测
-            if ppo_model and current_model_name:
+            # 为每个股票重新加载持仓状态
+            PORTFOLIO_STATE_FILE = f"portfolio_state_{STOCK_CODE}.json"
+            
+            # 批量预测：为每个股票重置模型训练状态
+            lstm_trained = False
+            transformer_trained = False
+            lstm_normalization_params = None
+            transformer_normalization_params = None
+            
+            portfolio_state = load_portfolio_state()
+            if portfolio_state:
+                if portfolio_state.get('stock_code') == STOCK_CODE:
+                    current_balance = portfolio_state.get('current_balance', 50000.0)
+                    shares_held = portfolio_state.get('shares_held', 0.0)
+                    last_price = portfolio_state.get('last_price', 0.0)
+                    initial_balance = portfolio_state.get('initial_balance', 50000.0)
+                    cost_price_val = portfolio_state.get('cost_price')
+                    actual_buy_price_val = portfolio_state.get('actual_buy_price')
+                    if cost_price_val and isinstance(cost_price_val, (int, float)) and cost_price_val > 0:
+                        cost_price = float(cost_price_val)
+                    elif actual_buy_price_val and isinstance(actual_buy_price_val, (int, float)) and actual_buy_price_val > 0:
+                        cost_price = float(actual_buy_price_val)
+                    else:
+                        cost_price = None
+                    print(f"✅ 已加载持仓状态: 持仓={shares_held:.2f}股, 资金={current_balance:.2f}元" + (f", 成本价={cost_price:.4f}元" if cost_price else ""))
+            else:
+                current_balance = 50000.0
+                shares_held = 0.0
+                last_price = 0.0
+                initial_balance = 50000.0
+                cost_price = None
+            
+            # 执行一次预测（原while True循环的内容）
+            try:
+                # 检查持仓状态更新（来自Web编辑器）
+                if ENABLE_WEB_EDITOR:
+                    current_balance, shares_held, last_price, initial_balance = refresh_portfolio_from_file_if_changed(
+                        current_balance, shares_held, last_price, initial_balance
+                    )
+                
+                iteration_count += 1
+                atr_value = None
+                data_source_used = "未知"
+                latest_time = None
+                stock_name = get_stock_name(STOCK_CODE)
+                print(f"\n{'='*70}")
+                print(f"📊 第 {iteration_count} 轮预测 [{stock_name}({STOCK_CODE})] - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
+                print(f"{'='*70}")
+                
+                # V16新增：显示V12预测准确率统计
+                display_prediction_accuracy(STOCK_CODE)
+                
+                # 获取数据（V11改进：优先获取最新数据）
+                df = None
+                if multi_source_manager:
+                    try:
+                        # 尝试获取最新数据（减少天数，确保获取最新）
+                        df, source = multi_source_manager.fetch_data(days=7)
+                        if df is not None and len(df) > 0:
+                            data_source_used = source or "multi_source"
+                            print(f"   📊 数据来源: {source}")
+                            # 显示数据源尝试情况
+                            stats = multi_source_manager.get_source_stats()
+                            failed_sources = []
+                            for src, stat in stats.items():
+                                if src != source and stat.get('fail', 0) > 0:
+                                    failed_sources.append(f"{src}(失败{stat['fail']}次)")
+                            if failed_sources:
+                                print(f"   📋 其他数据源状态: {', '.join(failed_sources)}")
+                            # 说明为什么使用当前数据源
+                            if source == 'baostock':
+                                print(f"   💡 说明: akshare获取失败，已回退到baostock（可能有1-2天延迟）")
+                            elif source == 'akshare':
+                                print(f"   💡 说明: 成功使用akshare获取数据")
+                    except Exception as e:
+                        print(f"   ⚠️  多数据源管理器获取失败: {e}")
+                
+                if df is None or len(df) == 0:
+                    try:
+                        code_info = convert_stock_code(STOCK_CODE)
+                        # V11改进：优先获取最近1-2天的数据，确保是最新的
+                        df = fetch_akshare_5min(code_info, days=2)  # 减少天数，确保获取最新数据
+                        if df is not None and len(df) > 0:
+                            data_source_used = "akshare"
+                        if df is None or len(df) == 0:
+                            # 如果失败，尝试获取7天数据
+                            df = fetch_akshare_5min(code_info, days=7)
+                            if df is not None and len(df) > 0:
+                                data_source_used = "akshare"
+                    except Exception as e:
+                        print(f"   ⚠️  数据获取失败: {e}")
+                        time.sleep(60)
+                        continue
+                
+                if df is None or len(df) == 0:
+                    print(f"⏸️  未找到数据")
+                    time.sleep(60)
+                    continue
+                
+                # V11改进：确保数据按时间排序，使用最新的数据
+                df = df.sort_values('time')
+                # 检查数据时间戳，确保使用最新数据
+                if 'time' in df.columns:
+                    # 显示最新数据的时间
+                    latest_time = df['time'].iloc[-1]
+                    print(f"   📅 最新数据时间: {latest_time}")
+                
+                closes = df['close'].astype(float).values
+                
+                # 如果数据不足，尝试用其他数据源补齐（例如：akshare 只有少量当日 5 分钟数据）
+                if len(closes) < 126:
+                    print(f"⚠️  数据不足（需要126条，实际{len(closes)}条）")
+                    
+                    # 使用多数据源合并功能，用历史数据补齐
+                    if multi_source_manager is not None:
+                        try:
+                            print("   🔄 正在尝试从其他数据源合并历史数据进行补齐...")
+                            merged_df = multi_source_manager.merge_data_from_multiple_sources(
+                                days=7,
+                                merge_strategy='union'
+                            )
+                            if merged_df is not None and len(merged_df) > len(df):
+                                # 合并后重新排序、去重
+                                merged_df = merged_df.drop_duplicates(subset=['time'], keep='last')
+                                merged_df = merged_df.sort_values('time')
+                                # 若缺少high/low，提示并继续后续ATR用收盘近似
+                                if ('high' not in merged_df.columns) or ('low' not in merged_df.columns):
+                                    print("   ⚠️ 合并数据缺少High/Low，ATR将使用收盘价近似，精度受限")
+                                merged_closes = merged_df['close'].astype(float).values
+                                if len(merged_closes) >= 126:
+                                    df = merged_df
+                                    closes = merged_closes
+                                    print(f"   ✅ 已通过合并数据源补齐历史数据，当前数据条数: {len(closes)}")
+                                else:
+                                    print(f"   ⚠️ 合并后数据仍不足（{len(merged_closes)} 条），暂时无法进行预测")
+                            else:
+                                print("   ⚠️ 无法通过合并数据源获得更多历史数据")
+                        except Exception as e:
+                            print(f"   ⚠️ 合并多数据源补齐历史数据时出错: {e}")
+                
+                # 再次检查是否满足最小长度要求
+                if len(closes) < 126:
+                    print("⏸️  有效历史数据仍不足，等待下一轮数据更新后再预测")
+                    time.sleep(60)
+                    continue
+                
+                # 计算ATR供动态止损使用（若高低价缺失则使用收盘近似并提示精度风险）
+                if ENABLE_ATR_STOP_LOSS:
+                    atr_value, atr_close_only = calculate_atr(df, period=ATR_PERIOD, return_meta=True)
+                    if atr_value:
+                        try:
+                            if atr_close_only:
+                                print(f"   📊 ATR({ATR_PERIOD})≈{atr_value:.4f} (收盘价近似，缺少High/Low，精度受限)")
+                            else:
+                                print(f"   📊 ATR({ATR_PERIOD})={atr_value:.4f} (用于动态止损)")
+                        except Exception:
+                            pass
+                    elif ENABLE_ATR_STOP_LOSS:
+                        print(f"   ⚠️  ATR计算失败（可能因数据不足或缺少收盘价），动态止损将跳过")
+                
+                # V11改进：仅从实时行情接口获取价格（不从持仓状态获取）
+                # 减少重试次数，避免频繁失败请求
+                realtime_price = None
                 try:
-                    ppo_action = model_actions.get(current_model_name)
-                    if ppo_action is not None:
+                    print(f"   🔄 正在从实时行情接口获取最新价格...")
+                    # 减少重试次数为1次，减少调试输出
+                    realtime_price = get_current_market_price(STOCK_CODE, max_retries=1, debug=False)
+                    if realtime_price and realtime_price > 0:
+                        print(f"   ✅ 已从实时行情接口获取价格: {realtime_price:.2f}")
+                    # 失败时不打印，避免频繁输出
+                except Exception as e:
+                    # 静默处理，不打印错误
+                    pass
+                
+                # 备选方案：从数据源获取（可能是历史数据）
+                data_source_price = closes[-1]
+                
+                # 确定最终使用的价格：优先级 实时行情(今天) > 持仓编辑器手动价格 > 实时行情(昨天) > 数据源价格
+                # 先读取持仓编辑器中的价格，用于比较
+                manual_price = None
+                manual_price_time = None
+                try:
+                    state = load_portfolio_state()
+                    if state and state.get('stock_code') == STOCK_CODE:
+                        manual_price = state.get('last_price', 0.0)
+                        manual_price_time = state.get('price_update_time') or state.get('last_update', '')
+                except:
+                    pass
+                
+                # 检查实时价格的数据日期（如果是baostock，可能是昨天的数据）
+                realtime_price_is_today = True
+                if realtime_price and realtime_price > 0:
+                    # 检查数据源时间，判断实时价格是否是今天的数据
+                    if 'time' in df.columns:
+                        latest_time_str = str(df['time'].iloc[-1])
+                        try:
+                            if len(latest_time_str) >= 8:
+                                year = int(latest_time_str[0:4])
+                                month = int(latest_time_str[4:6])
+                                day = int(latest_time_str[6:8])
+                                latest_date = datetime.date(year, month, day)
+                                today = datetime.date.today()
+                                days_diff = (today - latest_date).days
+                                if days_diff > 0:
+                                    realtime_price_is_today = False
+                                    print(f"   ⚠️  实时价格来自 {days_diff} 天前，可能不是最新")
+                        except:
+                            pass
+                
+                # 确定最终使用的价格
+                if realtime_price and realtime_price > 0 and realtime_price_is_today:
+                    # 实时价格是今天的，优先使用
+                    current_price = realtime_price
+                    price_source = "实时行情"
+                    # 同步更新到持仓状态文件
+                    try:
+                        state = load_portfolio_state()
+                        if state and state.get('stock_code') == STOCK_CODE:
+                            state['last_price'] = realtime_price
+                            state['price_source'] = '实时行情'
+                        state['price_update_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                        with open(PORTFOLIO_STATE_FILE, 'w', encoding='utf-8') as f:
+                            json.dump(state, f, indent=2, ensure_ascii=False)
+                        print(f"   ✅ 已同步实时价格到持仓编辑器: {realtime_price:.2f}")
+                    except Exception as e:
+                        print(f"   ⚠️  同步价格到持仓编辑器失败: {e}")
+                elif manual_price and manual_price > 0:
+                    # 如果实时价格是旧数据或没有，优先使用持仓编辑器中的手动价格
+                    current_price = manual_price
+                    price_source = "持仓编辑器(手动输入)"
+                    print(f"   ✅ 使用持仓编辑器中的手动价格: {current_price:.2f}")
+                # 如果实时价格是旧数据，不覆盖持仓编辑器中的新价格
+                if realtime_price and realtime_price > 0 and not realtime_price_is_today:
+                    print(f"   📝 检测到实时价格({realtime_price:.2f})是旧数据，保持持仓编辑器中的价格({current_price:.2f})")
+                elif realtime_price and realtime_price > 0:
+                    # 实时价格存在但是旧数据，且没有手动价格，使用实时价格
+                    current_price = realtime_price
+                    price_source = "实时行情(可能非最新)"
+                    print(f"   ⚠️  使用实时价格(可能非最新): {current_price:.2f}")
+                else:
+                    current_price = data_source_price
+                    price_source = "数据源(可能非最新)"
+                    # 检查数据时间，如果数据太旧，给出警告
+                    if 'time' in df.columns:
+                        latest_time_str = str(df['time'].iloc[-1])
+                        try:
+                            # 解析时间：20251202150000000 -> 2025-12-02 15:00:00
+                            if len(latest_time_str) >= 8:
+                                year = int(latest_time_str[0:4])
+                                month = int(latest_time_str[4:6])
+                                day = int(latest_time_str[6:8])
+                                latest_date = datetime.date(year, month, day)
+                                today = datetime.date.today()
+                                days_diff = (today - latest_date).days
+                                if days_diff > 0:
+                                    print(f"   ⚠️  数据源价格来自 {days_diff} 天前，可能不是最新价格")
+                        except:
+                            pass
+                    print(f"   ⚠️  实时行情获取失败，使用数据源价格: {current_price:.2f}")
+                
+                volume = float(df['volume'].iloc[-1]) if 'volume' in df.columns else 0.0
+                
+                stock_name = get_stock_name(STOCK_CODE)
+                print(f"   💰 [{stock_name}({STOCK_CODE})] 当前价格: {current_price:.2f} (来源: {price_source})")
+                print(f"   📈 成交量: {volume:,.0f}")
+                
+                # ========== V7: 技术指标计算 ==========
+                indicator_summary = None
+                if tech_indicators:
+                    try:
+                        df_with_indicators = tech_indicators.calculate_all(df)
+                        if 'KDJ' in df_with_indicators.columns:
+                            kdj_values = df_with_indicators['KDJ'].iloc[-1]
+                            rsi = df_with_indicators.get('RSI', pd.Series([0])).iloc[-1] if 'RSI' in df_with_indicators.columns else 0
+                            obv_ratio = df_with_indicators.get('OBV_Ratio', pd.Series([1.0])).iloc[-1] if 'OBV_Ratio' in df_with_indicators.columns else 1.0
+                            macd = df_with_indicators.get('MACD', pd.Series([0])).iloc[-1] if 'MACD' in df_with_indicators.columns else 0
+                            
+                            indicator_summary = {
+                                'KDJ': kdj_values if isinstance(kdj_values, dict) else {'K': 0, 'D': 0, 'J': 0},
+                                'RSI': rsi,
+                                'OBV': {'OBV_Ratio': obv_ratio},
+                                'MACD': {'MACD': macd}
+                            }
+                            print(f"   📊 V7技术指标: KDJ={indicator_summary['KDJ']}, RSI={rsi:.2f}")
+                    except Exception as e:
+                        print(f"   ⚠️  技术指标计算失败: {e}")
+                
+                # ========== V7: LLM指标解释 ==========
+                if llm_interpreter and indicator_summary:
+                    try:
+                        interpretation = llm_interpreter.interpret_indicators(
+                            indicator_summary,
+                            current_price=current_price
+                        )
+                        if interpretation:
+                            print(f"   🤖 V7 LLM解释: {interpretation.get('summary', '无')}")
+                    except Exception as e:
+                        print(f"   ⚠️  LLM解释失败: {e}")
+                
+                # ========== V7: PPO模型预测 ==========
+                ppo_action = None
+                ppo_operation = "持有"
+                
+                # V13: 多模型预测和回测
+                model_actions = {}  # 存储所有模型的预测动作 {model_name: action}
+                if ENABLE_AUTO_MODEL_SELECTION and len(candidate_ppo_models) > 0:
+                    # 对所有候选模型进行预测
+                    obs = np.array(closes[-126:], dtype=np.float32)
+                    
+                    for model_name, model_instance in candidate_ppo_models.items():
+                        try:
+                            action, _states = model_instance.predict(obs, deterministic=True)
+                            model_actions[model_name] = int(action)
+                        except Exception as e:
+                            # 静默处理单个模型预测失败
+                            pass
+                    
+                    # 使用当前选中的模型进行预测
+                if ppo_model and current_model_name:
+                    try:
+                        ppo_action = model_actions.get(current_model_name)
+                        if ppo_action is not None:
+                            ppo_operation = map_action_to_operation(ppo_action)
+                            stock_name = get_stock_name(STOCK_CODE)
+                            # 为避免"买入100%"等PPO动作文案产生歧义，这里不再直接输出PPO动作，
+                            # 请参考下方的「V7建议价格和仓位」以及「当前价格对应的合理仓位」
+                            
+                            # V7预测：添加买入卖出建议价格和当前建议持有仓位
+                            v7_suggestions = calculate_v7_price_suggestions(current_price, ppo_action, closes)
+                            if v7_suggestions:
+                                print(f"\n   💡 V7建议价格和仓位:")
+                                if v7_suggestions.get('suggested_buy_price'):
+                                    buy_price_diff = v7_suggestions['suggested_buy_price'] - current_price
+                                    buy_price_diff_pct = (buy_price_diff / current_price * 100) if current_price > 0 else 0
+                                    print(f"      💰 建议买入价格: {v7_suggestions['suggested_buy_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {buy_price_diff:+.2f}元 ({buy_price_diff_pct:+.2f}%))")
+                                if v7_suggestions.get('suggested_sell_price'):
+                                    sell_price_diff = v7_suggestions['suggested_sell_price'] - current_price
+                                    sell_price_diff_pct = (sell_price_diff / current_price * 100) if current_price > 0 else 0
+                                    print(f"      💰 建议卖出价格: {v7_suggestions['suggested_sell_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {sell_price_diff:+.2f}元 ({sell_price_diff_pct:+.2f}%))")
+                                # 为避免误导，这里显示的是"当前价格对应的合理仓位"，而不是PPO目标仓位
+                                current_pos_pct = v7_suggestions.get('current_position_pct', v7_suggestions['suggested_position_pct'])
+                                print(f"      📊 当前价格对应的合理仓位: {current_pos_pct:.0f}%")
+                                print(f"      📝 仓位描述: {v7_suggestions['position_description']}")
+                                # 增加更详细的人性化说明
+                                if v7_suggestions.get('detailed_position_description'):
+                                    print(f"      📖 详细说明: {v7_suggestions['detailed_position_description']}")
+                                
+                                # 显示详细的仓位价格建议
+                                if v7_suggestions.get('position_prices'):
+                                    position_prices = v7_suggestions['position_prices']
+                                    print(f"\n      📋 详细仓位价格建议:")
+                                    print(f"         🟢 100%仓位（满仓）: {position_prices['100%']:.2f}元 (价格越低，买入越多)")
+                                    print(f"         🟡 75%仓位:  {position_prices['75%']:.2f}元")
+                                    print(f"         🟠 50%仓位:  {position_prices['50%']:.2f}元")
+                                    print(f"         🟤 25%仓位:  {position_prices['25%']:.2f}元")
+                                    print(f"         ⚪ 0%仓位（空仓）:   {position_prices['0%']:.2f}元 (价格越高，卖出越多)")
+                                    
+                                    # 显示当前价格对应的仓位
+                                    current_pos_pct = v7_suggestions.get('current_position_pct', 50.0)
+                                    print(f"         📍 当前价格 {current_price:.2f}元 对应建议仓位: {current_pos_pct:.0f}%")
+                                    
+                                    # 计算当前价格与各仓位价格的差异
+                                    price_levels = [position_prices['100%'], position_prices['75%'], position_prices['50%'], position_prices['25%'], position_prices['0%']]
+                                    position_labels = ['100%', '75%', '50%', '25%', '0%']
+                                    closest_price = min(price_levels, key=lambda x: abs(x - current_price))
+                                    closest_index = price_levels.index(closest_price)
+                                    closest_position = position_labels[closest_index]
+                                    price_diff_from_closest = abs(current_price - closest_price)
+                                    price_diff_pct_from_closest = (price_diff_from_closest / current_price * 100) if current_price > 0 else 0
+                                    
+                                    if price_diff_pct_from_closest < 1.0:
+                                        print(f"         ✅ 当前价格接近{closest_position}仓位价格（{closest_price:.2f}元），差异仅{price_diff_pct_from_closest:.2f}%")
+                                    else:
+                                        print(f"         💡 最接近的仓位价格: {closest_position}仓位 {closest_price:.2f}元 (差异: {price_diff_from_closest:.2f}元, {price_diff_pct_from_closest:.2f}%)")
+                                
+                                print(f"      📈 价格区间: {v7_suggestions['price_interval_pct']:.2f}% (基于波动率{v7_suggestions['volatility_pct']:.2f}%)")
+                                
+                                # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
+                                if ppo_action is not None and ppo_action <= 2:
+                                    print(f"\n   ⚠️  V7下跌预警提示:")
+                                    print(f"      📉 PPO模型建议卖出操作（动作={ppo_action}），请注意风险")
+                                    print(f"      💡 建议：如果预测下跌2%以上，可考虑开盘卖出，在最低点再买回")
+                                    print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
+                    except Exception as e:
+                        print(f"   ⚠️  PPO预测失败: {e}")
+                elif ppo_model:
+                    # V12兼容模式：单一模型
+                    try:
+                        obs = np.array(closes[-126:], dtype=np.float32)
+                        action, _states = ppo_model.predict(obs, deterministic=True)
+                        ppo_action = int(action)
                         ppo_operation = map_action_to_operation(ppo_action)
                         stock_name = get_stock_name(STOCK_CODE)
-                        print(f"   🎯 V7 PPO动作 [{stock_name}({STOCK_CODE})]: {ppo_operation} (动作={ppo_action}, 模型={current_model_name})")
+                        # 为避免"买入100%"等PPO动作文案产生歧义，这里不再直接输出PPO动作，
+                        # 请参考下方的「V7建议价格和仓位」以及「当前价格对应的合理仓位」
                         
                         # V7预测：添加买入卖出建议价格和当前建议持有仓位
                         v7_suggestions = calculate_v7_price_suggestions(current_price, ppo_action, closes)
@@ -4064,925 +4428,839 @@ while True:
                                 sell_price_diff = v7_suggestions['suggested_sell_price'] - current_price
                                 sell_price_diff_pct = (sell_price_diff / current_price * 100) if current_price > 0 else 0
                                 print(f"      💰 建议卖出价格: {v7_suggestions['suggested_sell_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {sell_price_diff:+.2f}元 ({sell_price_diff_pct:+.2f}%))")
-                            # 为避免误导，这里显示的是“当前价格对应的合理仓位”，而不是PPO目标仓位
+                            # 为避免误导，这里显示的是"当前价格对应的合理仓位"，而不是PPO目标仓位
                             current_pos_pct = v7_suggestions.get('current_position_pct', v7_suggestions['suggested_position_pct'])
                             print(f"      📊 当前价格对应的合理仓位: {current_pos_pct:.0f}%")
                             print(f"      📝 仓位描述: {v7_suggestions['position_description']}")
                             # 增加更详细的人性化说明
-                            if v7_suggestions.get('detailed_position_description'):
-                                print(f"      📖 详细说明: {v7_suggestions['detailed_position_description']}")
-                            
-                            # 显示详细的仓位价格建议
-                            if v7_suggestions.get('position_prices'):
-                                position_prices = v7_suggestions['position_prices']
-                                print(f"\n      📋 详细仓位价格建议:")
-                                print(f"         🟢 100%仓位（满仓）: {position_prices['100%']:.2f}元 (价格越低，买入越多)")
-                                print(f"         🟡 75%仓位:  {position_prices['75%']:.2f}元")
-                                print(f"         🟠 50%仓位:  {position_prices['50%']:.2f}元")
-                                print(f"         🟤 25%仓位:  {position_prices['25%']:.2f}元")
-                                print(f"         ⚪ 0%仓位（空仓）:   {position_prices['0%']:.2f}元 (价格越高，卖出越多)")
-                                
-                                # 显示当前价格对应的仓位
-                                current_pos_pct = v7_suggestions.get('current_position_pct', 50.0)
-                                print(f"         📍 当前价格 {current_price:.2f}元 对应建议仓位: {current_pos_pct:.0f}%")
-                                
-                                # 计算当前价格与各仓位价格的差异
-                                price_levels = [position_prices['100%'], position_prices['75%'], position_prices['50%'], position_prices['25%'], position_prices['0%']]
-                                position_labels = ['100%', '75%', '50%', '25%', '0%']
-                                closest_price = min(price_levels, key=lambda x: abs(x - current_price))
-                                closest_index = price_levels.index(closest_price)
-                                closest_position = position_labels[closest_index]
-                                price_diff_from_closest = abs(current_price - closest_price)
-                                price_diff_pct_from_closest = (price_diff_from_closest / current_price * 100) if current_price > 0 else 0
-                                
-                                if price_diff_pct_from_closest < 1.0:
-                                    print(f"         ✅ 当前价格接近{closest_position}仓位价格（{closest_price:.2f}元），差异仅{price_diff_pct_from_closest:.2f}%")
-                                else:
-                                    print(f"         💡 最接近的仓位价格: {closest_position}仓位 {closest_price:.2f}元 (差异: {price_diff_from_closest:.2f}元, {price_diff_pct_from_closest:.2f}%)")
-                            
-                            print(f"      📈 价格区间: {v7_suggestions['price_interval_pct']:.2f}% (基于波动率{v7_suggestions['volatility_pct']:.2f}%)")
-                            
-                            # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
-                            if ppo_action is not None and ppo_action <= 2:
-                                print(f"\n   ⚠️  V7下跌预警提示:")
-                                print(f"      📉 PPO模型建议卖出操作（动作={ppo_action}），请注意风险")
-                                print(f"      💡 建议：如果预测下跌2%以上，可考虑开盘卖出，在最低点再买回")
-                                print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
-                except Exception as e:
-                    print(f"   ⚠️  PPO预测失败: {e}")
-        elif ppo_model:
-            # V12兼容模式：单一模型
-            try:
-                obs = np.array(closes[-126:], dtype=np.float32)
-                action, _states = ppo_model.predict(obs, deterministic=True)
-                ppo_action = int(action)
-                ppo_operation = map_action_to_operation(ppo_action)
-                stock_name = get_stock_name(STOCK_CODE)
-                print(f"   🎯 V7 PPO动作 [{stock_name}({STOCK_CODE})]: {ppo_operation} (动作={ppo_action})")
+                        if v7_suggestions.get('detailed_position_description'):
+                            print(f"      📖 详细说明: {v7_suggestions['detailed_position_description']}")
+                        
+                        print(f"      📈 价格区间: {v7_suggestions['price_interval_pct']:.2f}% (基于波动率{v7_suggestions['volatility_pct']:.2f}%)")
+                        
+                        # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
+                        if ppo_action is not None and ppo_action <= 2:
+                            print(f"\n   ⚠️  V7下跌预警提示:")
+                            print(f"      📉 PPO模型建议卖出操作（动作={ppo_action}），请注意风险")
+                            print(f"      💡 建议：如果预测下跌2%以上，可考虑开盘卖出，在最低点再买回")
+                            print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
+                    except Exception as e:
+                        print(f"   ⚠️  PPO预测失败: {e}")
                 
-                # V7预测：添加买入卖出建议价格和当前建议持有仓位
-                v7_suggestions = calculate_v7_price_suggestions(current_price, ppo_action, closes)
-                if v7_suggestions:
-                    print(f"\n   💡 V7建议价格和仓位:")
-                    if v7_suggestions.get('suggested_buy_price'):
-                        buy_price_diff = v7_suggestions['suggested_buy_price'] - current_price
-                        buy_price_diff_pct = (buy_price_diff / current_price * 100) if current_price > 0 else 0
-                        print(f"      💰 建议买入价格: {v7_suggestions['suggested_buy_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {buy_price_diff:+.2f}元 ({buy_price_diff_pct:+.2f}%))")
-                    if v7_suggestions.get('suggested_sell_price'):
-                        sell_price_diff = v7_suggestions['suggested_sell_price'] - current_price
-                        sell_price_diff_pct = (sell_price_diff / current_price * 100) if current_price > 0 else 0
-                        print(f"      💰 建议卖出价格: {v7_suggestions['suggested_sell_price']:.2f}元 (当前价格: {current_price:.2f}元, 差异: {sell_price_diff:+.2f}元 ({sell_price_diff_pct:+.2f}%))")
-                    # 为避免误导，这里显示的是“当前价格对应的合理仓位”，而不是PPO目标仓位
-                    current_pos_pct = v7_suggestions.get('current_position_pct', v7_suggestions['suggested_position_pct'])
-                    print(f"      📊 当前价格对应的合理仓位: {current_pos_pct:.0f}%")
-                    print(f"      📝 仓位描述: {v7_suggestions['position_description']}")
-                    # 增加更详细的人性化说明
-                    if v7_suggestions.get('detailed_position_description'):
-                        print(f"      📖 详细说明: {v7_suggestions['detailed_position_description']}")
-                    
-                    # 显示详细的仓位价格建议
-                    if v7_suggestions.get('position_prices'):
-                        position_prices = v7_suggestions['position_prices']
-                        print(f"\n      📋 详细仓位价格建议:")
-                        print(f"         🟢 100%仓位（满仓）: {position_prices['100%']:.2f}元 (价格越低，买入越多)")
-                        print(f"         🟡 75%仓位:  {position_prices['75%']:.2f}元")
-                        print(f"         🟠 50%仓位:  {position_prices['50%']:.2f}元")
-                        print(f"         🟤 25%仓位:  {position_prices['25%']:.2f}元")
-                        print(f"         ⚪ 0%仓位（空仓）:   {position_prices['0%']:.2f}元 (价格越高，卖出越多)")
-                        
-                        # 显示当前价格对应的仓位
-                        current_pos_pct = v7_suggestions.get('current_position_pct', 50.0)
-                        print(f"         📍 当前价格 {current_price:.2f}元 对应建议仓位: {current_pos_pct:.0f}%")
-                        
-                        # 计算当前价格与各仓位价格的差异
-                        price_levels = [position_prices['100%'], position_prices['75%'], position_prices['50%'], position_prices['25%'], position_prices['0%']]
-                        position_labels = ['100%', '75%', '50%', '25%', '0%']
-                        closest_price = min(price_levels, key=lambda x: abs(x - current_price))
-                        closest_index = price_levels.index(closest_price)
-                        closest_position = position_labels[closest_index]
-                        price_diff_from_closest = abs(current_price - closest_price)
-                        price_diff_pct_from_closest = (price_diff_from_closest / current_price * 100) if current_price > 0 else 0
-                        
-                        if price_diff_pct_from_closest < 1.0:
-                            print(f"         ✅ 当前价格接近{closest_position}仓位价格（{closest_price:.2f}元），差异仅{price_diff_pct_from_closest:.2f}%")
-                        else:
-                            print(f"         💡 最接近的仓位价格: {closest_position}仓位 {closest_price:.2f}元 (差异: {price_diff_from_closest:.2f}元, {price_diff_pct_from_closest:.2f}%)")
-                    
-                    print(f"      📈 价格区间: {v7_suggestions['price_interval_pct']:.2f}% (基于波动率{v7_suggestions['volatility_pct']:.2f}%)")
-                    
-                    # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
-                    if ppo_action is not None and ppo_action <= 2:
-                        print(f"\n   ⚠️  V7下跌预警提示:")
-                        print(f"      📉 PPO模型建议卖出操作（动作={ppo_action}），请注意风险")
-                        print(f"      💡 建议：如果预测下跌2%以上，可考虑开盘卖出，在最低点再买回")
-                        print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
-            except Exception as e:
-                print(f"   ⚠️  PPO预测失败: {e}")
-        
-        # ========== V9: LSTM/GRU预测 ==========
-        lstm_prediction = None
-        if lstm_processor and ENABLE_LSTM_PREDICTION:
-            try:
-                if not lstm_trained and len(closes) >= LSTM_SEQ_LENGTH * 2:
-                    print("   📚 V9训练LSTM模型...")
-                    # V11改进：使用滑动窗口归一化
-                    if USE_SLIDING_WINDOW_NORMALIZE and len(closes) > SLIDING_WINDOW_SIZE:
-                        recent_closes = closes[-SLIDING_WINDOW_SIZE:]
-                        print(f"      📊 使用滑动窗口归一化（窗口大小: {SLIDING_WINDOW_SIZE}）")
-                    else:
-                        recent_closes = closes
-                        print(f"      📊 使用全局归一化（数据点: {len(closes)}）")
-                    
-                    normalized_data, norm_params = lstm_processor.normalize(recent_closes)
-                    lstm_normalization_params = norm_params
-                    X, y = lstm_processor.create_sequences(normalized_data)
-                    if len(X) > 0:
-                        lstm_processor.train(X, y, epochs=50, batch_size=32, verbose=False)
-                        lstm_trained = True
-                        print("   ✅ V9 LSTM模型训练完成")
-                
-                if lstm_trained and lstm_normalization_params:
-                    # 使用训练时的归一化参数对输入序列进行归一化
-                    seq = closes[-LSTM_SEQ_LENGTH:]
-                    # 手动归一化（使用训练时的参数，而不是重新计算）
-                    norm_method = lstm_normalization_params.get('method', 'minmax')
-                    if norm_method == 'minmax':
-                        min_val = lstm_normalization_params['min']
-                        max_val = lstm_normalization_params['max']
-                        if max_val - min_val > 0:
-                            normalized_seq = (seq - min_val) / (max_val - min_val)
-                        else:
-                            normalized_seq = np.zeros_like(seq)
-                    elif norm_method == 'zscore':
-                        mean_val = lstm_normalization_params['mean']
-                        std_val = lstm_normalization_params['std']
-                        if std_val > 0:
-                            normalized_seq = (seq - mean_val) / std_val
-                        else:
-                            normalized_seq = np.zeros_like(seq)
-                    else:
-                        normalized_seq = seq
-                    
-                    # 预测（返回归一化后的预测值）
-                    prediction_norm = lstm_processor.predict_next(normalized_seq)
-                    # 反归一化预测结果
-                    lstm_prediction = float(lstm_processor.denormalize(
-                        np.array([prediction_norm]),
-                        lstm_normalization_params
-                    )[0]) if prediction_norm is not None else None
-                    if lstm_prediction:
-                        print(f"   📈 V9 LSTM预测价格: {lstm_prediction:.2f}")
-            except Exception as e:
-                print(f"   ⚠️  LSTM预测失败: {e}")
-        
-        # ========== V12: Transformer预测（优化版） ==========
-        transformer_prediction = None
-        if transformer_model and ENABLE_TRANSFORMER and len(closes) >= TRANSFORMER_MAX_SEQ_LEN:
-            try:
-                if not transformer_trained and len(closes) >= TRANSFORMER_MAX_SEQ_LEN * 2:
-                    print("   📚 V12训练Transformer模型...")
-                    # V12优化：智能归一化策略（考虑当前价格位置）
-                    if TRANSFORMER_ADAPTIVE_WINDOW:
-                        # 确定可用窗口大小（不超过数据总量）
-                        available_window = min(SLIDING_WINDOW_SIZE, len(closes))
-                        if available_window >= TRANSFORMER_MAX_SEQ_LEN * 2:  # 确保有足够数据训练
-                            # 计算当前价格在历史数据中的位置
-                            window_data = closes[-available_window:]
-                            price_position = (current_price - np.min(window_data)) / (np.max(window_data) - np.min(window_data) + 1e-8)
-                            
-                            # 如果当前价格在较高位置（>75%），使用更短的窗口以突出近期趋势
-                            if price_position > TRANSFORMER_PRICE_POSITION_THRESHOLD:
-                                # 使用60%的窗口，但至少保留足够的数据点
-                                adaptive_window = max(int(available_window * 0.6), TRANSFORMER_MAX_SEQ_LEN * 2)
-                                recent_closes = closes[-adaptive_window:]
-                                print(f"      📊 V12使用自适应窗口归一化（窗口大小: {adaptive_window}, 价格位置: {price_position*100:.1f}%）")
+                # ========== V9: LSTM/GRU预测 ==========
+                lstm_prediction = None
+                if lstm_processor and ENABLE_LSTM_PREDICTION:
+                    try:
+                        if not lstm_trained and len(closes) >= LSTM_SEQ_LENGTH * 2:
+                            print("   📚 V9训练LSTM模型...")
+                            # V11改进：使用滑动窗口归一化
+                            if USE_SLIDING_WINDOW_NORMALIZE and len(closes) > SLIDING_WINDOW_SIZE:
+                                recent_closes = closes[-SLIDING_WINDOW_SIZE:]
+                                print(f"      📊 使用滑动窗口归一化（窗口大小: {SLIDING_WINDOW_SIZE}）")
                             else:
-                                recent_closes = closes[-available_window:]
-                                print(f"      📊 V12使用滑动窗口归一化（窗口大小: {available_window}, 价格位置: {price_position*100:.1f}%）")
+                                recent_closes = closes
+                                print(f"      📊 使用全局归一化（数据点: {len(closes)}）")
+                        
+                        normalized_data, norm_params = lstm_processor.normalize(recent_closes)
+                        lstm_normalization_params = norm_params
+                        X, y = lstm_processor.create_sequences(normalized_data)
+                        if len(X) > 0:
+                            lstm_processor.train(X, y, epochs=50, batch_size=32, verbose=False)
+                            lstm_trained = True
+                            print("   ✅ V9 LSTM模型训练完成")
+                        
+                        if lstm_trained and lstm_normalization_params:
+                            # 使用训练时的归一化参数对输入序列进行归一化
+                            seq = closes[-LSTM_SEQ_LENGTH:]
+                            # 手动归一化（使用训练时的参数，而不是重新计算）
+                            norm_method = lstm_normalization_params.get('method', 'minmax')
+                            if norm_method == 'minmax':
+                                min_val = lstm_normalization_params['min']
+                                max_val = lstm_normalization_params['max']
+                            if max_val - min_val > 0:
+                                normalized_seq = (seq - min_val) / (max_val - min_val)
+                            else:
+                                normalized_seq = np.zeros_like(seq)
+                        elif norm_method == 'zscore':
+                            mean_val = lstm_normalization_params['mean']
+                            std_val = lstm_normalization_params['std']
+                            if std_val > 0:
+                                normalized_seq = (seq - mean_val) / std_val
+                            else:
+                                normalized_seq = np.zeros_like(seq)
                         else:
-                            # 数据量太少，使用全部数据但标记为自适应
-                            recent_closes = closes
-                            price_position = (current_price - np.min(closes)) / (np.max(closes) - np.min(closes) + 1e-8)
-                            print(f"      📊 V12使用自适应归一化（数据点: {len(closes)}, 价格位置: {price_position*100:.1f}%）")
-                    elif USE_SLIDING_WINDOW_NORMALIZE and len(closes) > SLIDING_WINDOW_SIZE:
-                        recent_closes = closes[-SLIDING_WINDOW_SIZE:]
-                        print(f"      📊 使用滑动窗口归一化（窗口大小: {SLIDING_WINDOW_SIZE}）")
-                    else:
-                        recent_closes = closes
-                        print(f"      📊 使用全局归一化（数据点: {len(closes)}）")
-                    
-                    normalized_closes, norm_params = transformer_model.normalize(recent_closes)
-                    transformer_normalization_params = norm_params
-                    
-                    X_list, y_list = [], []
-                    for i in range(TRANSFORMER_MAX_SEQ_LEN, len(normalized_closes)):
-                        X_list.append(normalized_closes[i-TRANSFORMER_MAX_SEQ_LEN:i])
-                        y_list.append(normalized_closes[i])
-                    
-                    if len(X_list) > 0:
-                        X = np.array(X_list).reshape(len(X_list), TRANSFORMER_MAX_SEQ_LEN, 1)
-                        y = np.array(y_list).reshape(len(y_list), 1)
-                        # V12优化：增加训练轮数到120，提高模型准确性
-                        transformer_model.train(
-                            X, y, epochs=TRANSFORMER_EPOCHS, batch_size=32,
-                            learning_rate=0.001, validation_split=0.2, verbose=False
-                        )
-                        transformer_trained = True
-                        print(f"   ✅ V12 Transformer模型训练完成（训练轮数: {TRANSFORMER_EPOCHS}）")
-                        # 输出归一化参数信息，便于诊断
-                        if norm_params.get('method') == 'minmax':
-                            print(f"      📊 归一化范围: [{norm_params['min']:.2f}, {norm_params['max']:.2f}], 当前价格: {current_price:.2f}")
+                            normalized_seq = seq
+                        
+                        # 预测（返回归一化后的预测值）
+                        prediction_norm = lstm_processor.predict_next(normalized_seq)
+                        # 反归一化预测结果
+                        lstm_prediction = float(lstm_processor.denormalize(
+                            np.array([prediction_norm]),
+                            lstm_normalization_params
+                        )[0]) if prediction_norm is not None else None
+                        if lstm_prediction:
+                            print(f"   📈 V9 LSTM预测价格: {lstm_prediction:.2f}")
+                    except Exception as e:
+                        print(f"   ⚠️  LSTM预测失败: {e}")
                 
-                if transformer_trained and transformer_normalization_params:
-                    seq = closes[-TRANSFORMER_MAX_SEQ_LEN:]
-                    # 使用训练时的归一化参数进行归一化（而不是重新计算）
-                    norm_method = transformer_normalization_params.get('method', 'minmax')
-                    if norm_method == 'minmax':
-                        min_val = transformer_normalization_params['min']
-                        max_val = transformer_normalization_params['max']
-                        if max_val - min_val > 0:
-                            normalized_seq = (seq - min_val) / (max_val - min_val)
+                # ========== V12: Transformer预测（优化版） ==========
+                transformer_prediction = None
+                if transformer_model and ENABLE_TRANSFORMER and len(closes) >= TRANSFORMER_MAX_SEQ_LEN:
+                    try:
+                        if not transformer_trained and len(closes) >= TRANSFORMER_MAX_SEQ_LEN * 2:
+                            print("   📚 V12训练Transformer模型...")
+                            # V12优化：智能归一化策略（考虑当前价格位置）
+                            if TRANSFORMER_ADAPTIVE_WINDOW:
+                                # 确定可用窗口大小（不超过数据总量）
+                                available_window = min(SLIDING_WINDOW_SIZE, len(closes))
+                                if available_window >= TRANSFORMER_MAX_SEQ_LEN * 2:  # 确保有足够数据训练
+                                    # 计算当前价格在历史数据中的位置
+                                    window_data = closes[-available_window:]
+                                    price_position = (current_price - np.min(window_data)) / (np.max(window_data) - np.min(window_data) + 1e-8)
+                                    
+                                    # 如果当前价格在较高位置（>75%），使用更短的窗口以突出近期趋势
+                                    if price_position > TRANSFORMER_PRICE_POSITION_THRESHOLD:
+                                        # 使用60%的窗口，但至少保留足够的数据点
+                                        adaptive_window = max(int(available_window * 0.6), TRANSFORMER_MAX_SEQ_LEN * 2)
+                                    else:
+                                        # 价格位置较低，使用完整窗口
+                                        adaptive_window = available_window
+                                    recent_closes = closes[-adaptive_window:]
+                                    print(f"      📊 V12使用自适应窗口归一化（窗口大小: {adaptive_window}, 价格位置: {price_position*100:.1f}%）")
+                                else:
+                                    recent_closes = closes[-available_window:]
+                                    print(f"      📊 V12使用滑动窗口归一化（窗口大小: {available_window}, 价格位置: {price_position*100:.1f}%）")
+                            else:
+                                # 数据量太少，使用全部数据但标记为自适应
+                                recent_closes = closes
+                                price_position = (current_price - np.min(closes)) / (np.max(closes) - np.min(closes) + 1e-8)
+                                print(f"      📊 V12使用自适应归一化（数据点: {len(closes)}, 价格位置: {price_position*100:.1f}%）")
+                        elif USE_SLIDING_WINDOW_NORMALIZE and len(closes) > SLIDING_WINDOW_SIZE:
+                            recent_closes = closes[-SLIDING_WINDOW_SIZE:]
+                            print(f"      📊 使用滑动窗口归一化（窗口大小: {SLIDING_WINDOW_SIZE}）")
                         else:
-                            normalized_seq = np.zeros_like(seq)
-                    elif norm_method == 'zscore':
-                        mean_val = transformer_normalization_params['mean']
-                        std_val = transformer_normalization_params['std']
-                        if std_val > 0:
-                            normalized_seq = (seq - mean_val) / std_val
-                        else:
-                            normalized_seq = np.zeros_like(seq)
-                    else:
-                        normalized_seq = seq
-                    
-                    # 预测（返回归一化后的预测值）
-                    prediction_norm = transformer_model.predict_next(normalized_seq)
-                    # 反归一化预测结果
-                    transformer_prediction_raw = float(transformer_model.denormalize(
-                        np.array([prediction_norm]),
-                        transformer_normalization_params
-                    )[0]) if prediction_norm is not None else None
-                    
-                    # V12优化：趋势感知机制和预测后处理
-                    if transformer_prediction_raw:
-                        transformer_prediction = transformer_prediction_raw
+                            recent_closes = closes
+                            print(f"      📊 使用全局归一化（数据点: {len(closes)}）")
                         
-                        # V12优化：趋势感知机制（基于价格动量调整）
-                        if TRANSFORMER_TREND_AWARE and len(closes) >= 10:
-                            # 计算短期和中期趋势
-                            short_trend = (closes[-1] - closes[-5]) / closes[-5] if closes[-5] > 0 else 0  # 5日趋势
-                            mid_trend = (closes[-1] - closes[-10]) / closes[-10] if closes[-10] > 0 else 0  # 10日趋势
-                            momentum = (short_trend + mid_trend) / 2  # 综合动量
-                            
-                            # 如果趋势向上且预测偏低，适当上调预测
-                            if momentum > 0.01 and transformer_prediction < current_price:
-                                trend_adjustment = min(momentum * 0.3, 0.05)  # 最大调整5%
-                                transformer_prediction = transformer_prediction * (1 + trend_adjustment)
+                        normalized_closes, norm_params = transformer_model.normalize(recent_closes)
+                        transformer_normalization_params = norm_params
                         
-                        # V12优化：预测后处理（根据当前价格位置校正预测）
-                        if TRANSFORMER_POST_PROCESS:
+                        X_list, y_list = [], []
+                        for i in range(TRANSFORMER_MAX_SEQ_LEN, len(normalized_closes)):
+                            X_list.append(normalized_closes[i-TRANSFORMER_MAX_SEQ_LEN:i])
+                            y_list.append(normalized_closes[i])
+                        
+                        if len(X_list) > 0:
+                            X = np.array(X_list).reshape(len(X_list), TRANSFORMER_MAX_SEQ_LEN, 1)
+                            y = np.array(y_list).reshape(len(y_list), 1)
+                            # V12优化：增加训练轮数到120，提高模型准确性
+                            transformer_model.train(
+                                X, y, epochs=TRANSFORMER_EPOCHS, batch_size=32,
+                                learning_rate=0.001, validation_split=0.2, verbose=False
+                            )
+                            transformer_trained = True
+                            print(f"   ✅ V12 Transformer模型训练完成（训练轮数: {TRANSFORMER_EPOCHS}）")
+                            # 输出归一化参数信息，便于诊断
+                            if norm_params.get('method') == 'minmax':
+                                print(f"      📊 归一化范围: [{norm_params['min']:.2f}, {norm_params['max']:.2f}], 当前价格: {current_price:.2f}")
+                        
+                        if transformer_trained and transformer_normalization_params:
+                            seq = closes[-TRANSFORMER_MAX_SEQ_LEN:]
+                            # 使用训练时的归一化参数进行归一化（而不是重新计算）
                             norm_method = transformer_normalization_params.get('method', 'minmax')
                             if norm_method == 'minmax':
                                 min_val = transformer_normalization_params['min']
                                 max_val = transformer_normalization_params['max']
                                 if max_val - min_val > 0:
-                                    price_position = (current_price - min_val) / (max_val - min_val)
-                                    
-                                    # 如果当前价格在较高位置（>75%），且预测明显偏低，进行校正
-                                    if price_position > TRANSFORMER_PRICE_POSITION_THRESHOLD:
-                                        price_diff_pct = (transformer_prediction - current_price) / current_price
-                                        
-                                        # 如果预测偏低超过3%，进行校正（降低阈值，更积极校正）
-                                        if price_diff_pct < -0.03:
-                                            # 计算校正因子：当前价格位置越高，校正越大
-                                            correction_factor = (price_position - TRANSFORMER_PRICE_POSITION_THRESHOLD) / (1 - TRANSFORMER_PRICE_POSITION_THRESHOLD)
-                                            # 增强校正力度：根据价格位置和偏差程度动态调整
-                                            base_correction = abs(price_diff_pct) * correction_factor
-                                            # 价格位置越高，校正越激进（最高校正70%的偏差）
-                                            correction_amount = base_correction * (0.5 + correction_factor * 0.4)
-                                            transformer_prediction = transformer_prediction * (1 + correction_amount)
-                                            print(f"      ✨ V12预测后处理: 价格位置{price_position*100:.1f}%, 已校正预测偏差{correction_amount*100:.1f}%")
-                        
-                        # 输出预测结果和诊断信息
-                        norm_method = transformer_normalization_params.get('method', 'minmax')
-                        if norm_method == 'minmax':
-                            min_val = transformer_normalization_params['min']
-                            max_val = transformer_normalization_params['max']
-                            price_diff = transformer_prediction - current_price
-                            price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
-                            price_position = ((current_price - min_val) / (max_val - min_val) * 100) if (max_val - min_val) > 0 else 0
-                            
-                            print(f"   🔮 V12 Transformer预测价格: {transformer_prediction:.2f} (当前价格: {current_price:.2f}, 差异: {price_diff:+.2f} ({price_diff_pct:+.2f}%))")
-                            print(f"      📊 归一化范围: [{min_val:.2f}, {max_val:.2f}], 当前价格在范围中的位置: {price_position:.1f}%")
-                            
-                            if transformer_prediction < current_price and abs(price_diff_pct) > 5:
-                                print(f"      💡 V12优化说明:")
-                                print(f"         1. ✅ 已增加训练轮数到{TRANSFORMER_EPOCHS}轮，提高模型准确性")
-                                if TRANSFORMER_ADAPTIVE_WINDOW:
-                                    print(f"         2. ✅ 已启用自适应窗口归一化，根据价格位置动态调整")
-                                if TRANSFORMER_TREND_AWARE:
-                                    print(f"         3. ✅ 已启用趋势感知机制，基于价格动量调整预测")
-                                if TRANSFORMER_POST_PROCESS:
-                                    print(f"         4. ✅ 已启用预测后处理优化，动态校正预测偏差")
+                                    normalized_seq = (seq - min_val) / (max_val - min_val)
+                                else:
+                                    normalized_seq = np.zeros_like(seq)
+                            elif norm_method == 'zscore':
+                                mean_val = transformer_normalization_params['mean']
+                                std_val = transformer_normalization_params['std']
+                                if std_val > 0:
+                                    normalized_seq = (seq - mean_val) / std_val
+                            else:
+                                normalized_seq = np.zeros_like(seq)
                         else:
-                            price_diff = transformer_prediction - current_price
-                            price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
-                            print(f"   🔮 V12 Transformer预测价格: {transformer_prediction:.2f} (当前价格: {current_price:.2f}, 差异: {price_diff:+.2f} ({price_diff_pct:+.2f}%))")
-            except Exception as e:
-                print(f"   ⚠️  Transformer预测失败: {e}")
-                import traceback
-                traceback.print_exc()
-        
-        # ========== V10: 多模态处理 ==========
-        multimodal_result = None
-        if multimodal_processor and ENABLE_MULTIMODAL:
-            try:
-                # V11改进：使用真实新闻源（LLM市场情报）
-                text_data = None
-                if USE_REAL_NEWS_SOURCE and llm_agent:
-                    try:
-                        # 获取当前日期的市场情报
-                        today_str = datetime.datetime.now().strftime('%Y-%m-%d')
-                        intelligence = llm_agent.get_market_intelligence(today_str)
-                        if intelligence and 'summary' in intelligence:
-                            text_data = intelligence['summary']
-                            print(f"   📰 V11使用真实新闻源: {text_data[:50]}...")
+                            normalized_seq = seq
+                        
+                        # 预测（返回归一化后的预测值）
+                        prediction_norm = transformer_model.predict_next(normalized_seq)
+                        # 反归一化预测结果
+                        transformer_prediction_raw = float(transformer_model.denormalize(
+                            np.array([prediction_norm]),
+                            transformer_normalization_params
+                        )[0]) if prediction_norm is not None else None
+                        
+                        # V12优化：趋势感知机制和预测后处理
+                        if transformer_prediction_raw:
+                            transformer_prediction = transformer_prediction_raw
+                            
+                            # V12优化：趋势感知机制（基于价格动量调整）
+                            if TRANSFORMER_TREND_AWARE and len(closes) >= 10:
+                                # 计算短期和中期趋势
+                                short_trend = (closes[-1] - closes[-5]) / closes[-5] if closes[-5] > 0 else 0  # 5日趋势
+                                mid_trend = (closes[-1] - closes[-10]) / closes[-10] if closes[-10] > 0 else 0  # 10日趋势
+                                momentum = (short_trend + mid_trend) / 2  # 综合动量
+                                
+                                # 如果趋势向上且预测偏低，适当上调预测
+                                if momentum > 0.01 and transformer_prediction < current_price:
+                                    trend_adjustment = min(momentum * 0.3, 0.05)  # 最大调整5%
+                                    transformer_prediction = transformer_prediction * (1 + trend_adjustment)
+                            
+                            # V12优化：预测后处理（根据当前价格位置校正预测）
+                            if TRANSFORMER_POST_PROCESS:
+                                norm_method = transformer_normalization_params.get('method', 'minmax')
+                                if norm_method == 'minmax':
+                                    min_val = transformer_normalization_params['min']
+                                    max_val = transformer_normalization_params['max']
+                                    if max_val - min_val > 0:
+                                        price_position = (current_price - min_val) / (max_val - min_val)
+                                        
+                                        # 如果当前价格在较高位置（>75%），且预测明显偏低，进行校正
+                                        if price_position > TRANSFORMER_PRICE_POSITION_THRESHOLD:
+                                            price_diff_pct = (transformer_prediction - current_price) / current_price
+                                            
+                                            # 如果预测偏低超过3%，进行校正（降低阈值，更积极校正）
+                                            if price_diff_pct < -0.03:
+                                                # 计算校正因子：当前价格位置越高，校正越大
+                                                correction_factor = (price_position - TRANSFORMER_PRICE_POSITION_THRESHOLD) / (1 - TRANSFORMER_PRICE_POSITION_THRESHOLD)
+                                                # 增强校正力度：根据价格位置和偏差程度动态调整
+                                                base_correction = abs(price_diff_pct) * correction_factor
+                                                # 价格位置越高，校正越激进（最高校正70%的偏差）
+                                                correction_amount = base_correction * (0.5 + correction_factor * 0.4)
+                                                transformer_prediction = transformer_prediction * (1 + correction_amount)
+                                                print(f"      ✨ V12预测后处理: 价格位置{price_position*100:.1f}%, 已校正预测偏差{correction_amount*100:.1f}%")
+                            
+                            # 输出预测结果和诊断信息
+                            norm_method = transformer_normalization_params.get('method', 'minmax')
+                            if norm_method == 'minmax':
+                                min_val = transformer_normalization_params['min']
+                                max_val = transformer_normalization_params['max']
+                                price_diff = transformer_prediction - current_price
+                                price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
+                                price_position = ((current_price - min_val) / (max_val - min_val) * 100) if (max_val - min_val) > 0 else 0
+                                
+                                print(f"   🔮 V12 Transformer预测价格: {transformer_prediction:.2f} (当前价格: {current_price:.2f}, 差异: {price_diff:+.2f} ({price_diff_pct:+.2f}%))")
+                                print(f"      📊 归一化范围: [{min_val:.2f}, {max_val:.2f}], 当前价格在范围中的位置: {price_position:.1f}%")
+                                
+                                # V16新增：保存V12预测结果用于准确率统计
+                                current_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+                                save_v12_prediction(current_date_str, transformer_prediction, current_price, STOCK_CODE)
+                                
+                                if transformer_prediction < current_price and abs(price_diff_pct) > 5:
+                                    print(f"      💡 V12优化说明:")
+                                    print(f"         1. ✅ 已增加训练轮数到{TRANSFORMER_EPOCHS}轮，提高模型准确性")
+                                    if TRANSFORMER_ADAPTIVE_WINDOW:
+                                        print(f"         2. ✅ 已启用自适应窗口归一化，根据价格位置动态调整")
+                                    if TRANSFORMER_TREND_AWARE:
+                                        print(f"         3. ✅ 已启用趋势感知机制，基于价格动量调整预测")
+                                    if TRANSFORMER_POST_PROCESS:
+                                        print(f"         4. ✅ 已启用预测后处理优化，动态校正预测偏差")
+                            else:
+                                price_diff = transformer_prediction - current_price
+                                price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
+                                print(f"   🔮 V12 Transformer预测价格: {transformer_prediction:.2f} (当前价格: {current_price:.2f}, 差异: {price_diff:+.2f} ({price_diff_pct:+.2f}%))")
+                                
+                                # V16新增：保存V12预测结果用于准确率统计
+                                current_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+                                save_v12_prediction(current_date_str, transformer_prediction, current_price, STOCK_CODE)
                     except Exception as e:
-                        if FALLBACK_TO_SAMPLE_TEXTS:
+                        print(f"   ⚠️  Transformer预测失败: {e}")
+                        import traceback
+                        traceback.print_exc()
+                
+                # ========== V10: 多模态处理 ==========
+                multimodal_result = None
+                if multimodal_processor and ENABLE_MULTIMODAL:
+                    try:
+                        # V11改进：使用真实新闻源（LLM市场情报）
+                        text_data = None
+                        if USE_REAL_NEWS_SOURCE and llm_agent:
+                            try:
+                                # 获取当前日期的市场情报
+                                today_str = datetime.datetime.now().strftime('%Y-%m-%d')
+                                intelligence = llm_agent.get_market_intelligence(today_str)
+                                if intelligence and 'summary' in intelligence:
+                                    text_data = intelligence['summary']
+                                    print(f"   📰 V11使用真实新闻源: {text_data[:50]}...")
+                            except Exception as e:
+                                if FALLBACK_TO_SAMPLE_TEXTS:
+                                    text_data = sample_texts[text_index % len(sample_texts)]
+                                    text_index += 1
+                                    print(f"   ⚠️  获取真实新闻失败，使用样本文本: {e}")
+                                else:
+                                    raise
+                        else:
+                            # 使用样本文本
                             text_data = sample_texts[text_index % len(sample_texts)]
                             text_index += 1
-                            print(f"   ⚠️  获取真实新闻失败，使用样本文本: {e}")
-                        else:
-                            raise
-                else:
-                    # 使用样本文本
-                    text_data = sample_texts[text_index % len(sample_texts)]
-                    text_index += 1
-                
-                if text_data:
-                    multimodal_result = multimodal_processor.process(
-                        time_series_data=closes[-60:],
-                        text_data=text_data
-                    )
-                    print(f"   🌐 V10多模态处理: 情感={multimodal_result.get('sentiment', {}).get('polarity', 0):.2f}")
-            except Exception as e:
-                print(f"   ⚠️  多模态处理失败: {e}")
-        
-        # ========== V10: 全息动态模型 ==========
-        holographic_signal = None
-        if holographic_model and ENABLE_HOLOGRAPHIC:
-            try:
-                fallback_used = False
-                holographic_result = holographic_model.process(
-                    time_series_data=closes[-60:],
-                    text_data=sample_texts[text_index % len(sample_texts)],
-                    technical_indicators=indicator_summary,
-                    market_intelligence=None
-                )
-                holographic_signal_raw = holographic_result.get('comprehensive_signal') if holographic_result else None
-                if holographic_signal_raw and isinstance(holographic_signal_raw, dict):
-                    raw_conf = float(holographic_signal_raw.get('confidence', 0) or 0.0)
-                    if raw_conf <= 0.05:
-                        fallback_used = True
-                    holographic_signal = refine_holographic_signal(
-                        holographic_signal_raw,
-                        closes=closes,
-                        indicator_summary=indicator_summary,
-                        fallback_used=fallback_used
-                    )
-                    print(f"   🌟 V10全息信号: {holographic_signal.get('signal', 'hold')} (置信度={holographic_signal.get('confidence', 0):.2f}, 原始={holographic_signal_raw.get('signal','?')}, 原置信度={raw_conf:.2f})")
-                    reason = holographic_signal.get('reason')
-                    if reason:
-                        print(f"      💡 全息理由: {reason}")
-                else:
-                    holographic_signal = {'signal': 'hold', 'confidence': 0.15, 'reason': '无信号'}
-                    print(f"   🌟 V10全息信号: hold (置信度=0.15，原因: 无信号)")
-            except Exception as e:
-                print(f"   ⚠️  全息模型处理失败: {e}")
-        
-        # ========== V12: 智能融合决策（优化版：增加冲突检测） ==========
-        conflict_info = None
-        if ENABLE_MULTI_MODEL_FUSION:
-            final_action, confidence, adjusted_weights, conflict_info = fuse_multi_model_predictions(
-                ppo_action, lstm_prediction, transformer_prediction,
-                holographic_signal, MODEL_WEIGHTS.copy(), current_price
-            )
-            final_operation = map_action_to_operation(final_action)
-            stock_name = get_stock_name(STOCK_CODE)
-            print(f"\n   ⭐ V12融合决策 [{stock_name}({STOCK_CODE})]: {final_operation} (置信度={confidence:.2f})")
-            
-            # V12下跌预测检测：当预测下跌2%或3%以上时，提示做空处理（有区分度）
-            price_change_pct_for_warning = None
-            avg_prediction_for_warning = None
-            if conflict_info and conflict_info.get('price_change_pct') is not None:
-                price_change_pct_for_warning = conflict_info.get('price_change_pct', 0)
-                avg_prediction_for_warning = conflict_info.get('avg_prediction', current_price)
-            elif lstm_prediction is not None or transformer_prediction is not None:
-                # 如果没有conflict_info，使用LSTM/Transformer预测计算
-                predictions = []
-                if lstm_prediction is not None and lstm_prediction > 0:
-                    predictions.append(lstm_prediction)
-                if transformer_prediction is not None and transformer_prediction > 0:
-                    predictions.append(transformer_prediction)
-                if predictions:
-                    avg_prediction_for_warning = np.mean(predictions)
-                    price_change_pct_for_warning = (avg_prediction_for_warning - current_price) / current_price * 100 if current_price > 0 else 0
-            
-            # 区分2%和3%的提示：3%以上显示严重警告，2-3%显示一般警告
-            if price_change_pct_for_warning is not None and price_change_pct_for_warning <= -3.0:
-                # 下跌3%以上：严重警告
-                print(f"\n   🚨 V12严重下跌预警（≥3%）:")
-                print(f"      📉 预测价格大幅下跌: {abs(price_change_pct_for_warning):.2f}% (预测价格: {avg_prediction_for_warning:.2f}元, 当前价格: {current_price:.2f}元)")
-                print(f"      ⚠️  强烈建议：开盘立即卖出，在最低点再买回")
-                print(f"      🔄 做空处理：强烈建议进行做空操作以规避大幅下跌风险")
-                print(f"      🛑 风险提示：下跌幅度较大，请务必谨慎操作，严格执行止损")
-            elif price_change_pct_for_warning is not None and price_change_pct_for_warning <= -2.0:
-                # 下跌2-3%：一般警告
-                print(f"\n   ⚠️  V12下跌预警（2-3%）:")
-                print(f"      📉 预测价格下跌: {abs(price_change_pct_for_warning):.2f}% (预测价格: {avg_prediction_for_warning:.2f}元, 当前价格: {current_price:.2f}元)")
-                print(f"      💡 建议：可考虑开盘卖出，在最低点再买回")
-                print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
-                print(f"      ⚠️  风险提示：下跌幅度中等，请注意风险控制")
-            
-# V12优化：显示冲突检测和调整信息
-            if conflict_info and conflict_info.get('has_conflict', False):
-                print(f"   ⚠️  信号冲突检测:")
-                if conflict_info.get('avg_prediction') is not None:
-                    price_change_pct = conflict_info.get('price_change_pct', 0)
-                    direction = "下跌" if price_change_pct < 0 else "上涨"
-                    print(f"      📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs(price_change_pct):.2f}%）")
-                print(f"      🎯 PPO原始建议: {map_action_to_operation(conflict_info.get('original_action', ppo_action))}")
-                if conflict_info.get('adjustment_reason'):
-                    print(f"      💡 调整原因: {conflict_info['adjustment_reason']}")
-                print(f"      ✅ 调整后决策: {final_operation}")
-            elif conflict_info and conflict_info.get('avg_prediction') is not None:
-                # 无冲突，显示预测信息
-                price_change_pct = conflict_info.get('price_change_pct', 0)
-                direction = "上涨" if price_change_pct > 0 else "下跌"
-                abs_price_change = abs(price_change_pct)
-                
-                # V12优化：更详细地说明预测方向与决策的关系
-                if abs_price_change < 1.5:
-                    # 预测方向不明确（<1.5%），说明为何未触发冲突检测
-                    if price_change_pct < 0:
-                        print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），预测方向不明确，未触发冲突检测，与PPO建议一致")
-                    else:
-                        print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），与PPO建议一致")
-                else:
-                    # 预测方向明确但一致
-                    print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），与PPO建议方向一致")
-            
-            if ENABLE_DYNAMIC_WEIGHTS:
-                print(f"   📊 动态权重: PPO={adjusted_weights['ppo']:.1%}, LSTM={adjusted_weights['lstm']:.1%}, Transformer={adjusted_weights['transformer']:.1%}, 全息={adjusted_weights['holographic']:.1%}")
-            else:
-                print(f"   📊 模型权重: PPO={MODEL_WEIGHTS['ppo']:.1%}, LSTM={MODEL_WEIGHTS['lstm']:.1%}, Transformer={MODEL_WEIGHTS['transformer']:.1%}, 全息={MODEL_WEIGHTS['holographic']:.1%}")
-        else:
-            final_action = ppo_action
-            final_operation = ppo_operation
-        
-        # ========== V16: 趋势/震荡双策略加权融合 ==========
-        if ENABLE_REGIME_STRATEGY and current_price > 0 and closes is not None and len(closes) >= max(TREND_BREAKOUT_WINDOW, BOLL_PERIOD):
-            regime, trend_score, range_score, boll_info = detect_market_regime(
-                closes, current_price, transformer_prediction, confidence, holographic_signal
-            )
-            trend_bias, breakout_price = trend_strategy_signal(closes, current_price)
-            mr_bias, mr_upper, mr_ma, mr_lower = mean_reversion_signal(closes, current_price)
-            
-            adjust = 0
-            reason = ""
-            if regime == 'trend' and trend_bias > 0:
-                adjust += TREND_ADJUST_STEP
-                reason = f"趋势突破(>{TREND_BREAKOUT_WINDOW}窗高点)，增强买入"
-            elif regime == 'range':
-                if mr_bias > 0:
-                    adjust += 1
-                    reason = "震荡下轨附近，倾向买入"
-                elif mr_bias < 0:
-                    adjust -= 1
-                    reason = "震荡上轨附近，倾向卖出"
-            
-            adjust = int(np.clip(adjust, -REGIME_MAX_ADJUST, REGIME_MAX_ADJUST))
-            if adjust != 0 and final_action is not None:
-                original_action = final_action
-                final_action = int(np.clip(final_action + adjust, 0, 6))
-                final_operation = map_action_to_operation(final_action)
-                bandwidth_str = f"{boll_info['bandwidth']:.4f}" if boll_info else "N/A"
-                print(f"\n   🧭 V16市场状态: {regime} (trend_score={trend_score:.2f}, range_score={range_score:.2f}, 带宽={bandwidth_str})")
-                if reason:
-                    print(f"      💡 策略调整: {reason} | 动作 {original_action} -> {final_action} ({final_operation})")
-            elif regime != 'neutral':
-                bandwidth_str = f"{boll_info['bandwidth']:.4f}" if boll_info else "N/A"
-                print(f"\n   🧭 V16市场状态: {regime} (trend_score={trend_score:.2f}, range_score={range_score:.2f}, 带宽={bandwidth_str}) 无需调整")
-        
-        # ========== V13: 止损止盈风险控制 ==========
-        stop_loss_info = None
-        if ENABLE_STOP_LOSS_TAKE_PROFIT and shares_held > 0:
-            # 获取成本价
-            portfolio_state_for_stop = load_portfolio_state()
-            current_cost_price = None
-            if portfolio_state_for_stop and portfolio_state_for_stop.get('stock_code') == STOCK_CODE:
-                cost_price_val = portfolio_state_for_stop.get('cost_price')
-                actual_buy_price_val = portfolio_state_for_stop.get('actual_buy_price')
-                if cost_price_val and isinstance(cost_price_val, (int, float)) and cost_price_val > 0:
-                    current_cost_price = float(cost_price_val)
-                elif actual_buy_price_val and isinstance(actual_buy_price_val, (int, float)) and actual_buy_price_val > 0:
-                    current_cost_price = float(actual_buy_price_val)
-            
-            if current_cost_price and current_cost_price > 0:
-                # 应用止损止盈逻辑
-                final_action, stop_loss_info = apply_stop_loss_take_profit(
-                    final_action, current_price, current_cost_price, shares_held, atr_value=atr_value
-                )
-                final_operation = map_action_to_operation(final_action)
-                
-                # 显示止损止盈信息
-                if stop_loss_info and stop_loss_info.get('triggered', False):
-                    profit_loss_pct = stop_loss_info.get('profit_loss_pct', 0)
-                    reason = stop_loss_info.get('reason', '')
-                    original_action = stop_loss_info.get('original_action')
-                    atr_stop_price_val = stop_loss_info.get('atr_stop_price')
-                    
-                    print(f"\n   🚨 V13止损止盈风险控制:")
-                    print(f"      ⚠️  {reason}")
-                    if original_action is not None:
-                        print(f"      📊 原始决策: {map_action_to_operation(original_action)}")
-                    print(f"      ✅ 调整后决策: {final_operation}")
-                    print(f"      💰 当前盈亏: {profit_loss_pct:+.2f}% (成本价: {current_cost_price:.4f}元, 当前价: {current_price:.2f}元)")
-                    if atr_stop_price_val:
-                        print(f"      🛡️  ATR动态止损价: {atr_stop_price_val:.2f}元 (ATR×{ATR_MULTIPLIER})")
-                else:
-                    # 显示当前盈亏状态（未触发止损止盈）
-                    profit_loss_pct = stop_loss_info.get('profit_loss_pct', 0) if stop_loss_info else None
-                    atr_stop_price_val = stop_loss_info.get('atr_stop_price') if stop_loss_info else None
-                    if profit_loss_pct is not None:
-                        # 计算距离止损止盈的距离
-                        distance_to_stop_loss = abs(STOP_LOSS_PCT - profit_loss_pct) if profit_loss_pct < 0 else None
-                        distance_to_take_profit = abs(TAKE_PROFIT_PCT - profit_loss_pct) if profit_loss_pct > 0 else None
-                        if atr_stop_price_val:
-                            atr_gap = (current_price - atr_stop_price_val)
-                            atr_gap_pct = atr_gap / current_price * 100 if current_price > 0 else None
-                            print(f"   🛡️  ATR动态止损价: {atr_stop_price_val:.2f}元 (当前价与ATR止损差距: {atr_gap:+.2f}元, {atr_gap_pct:+.2f}% )")
                         
-                        if profit_loss_pct < 0:
-                            # 亏损状态，显示距离止损的距离
-                            if distance_to_stop_loss:
-                                print(f"\n   📊 V13风险监控: 当前亏损{abs(profit_loss_pct):.2f}%，距离止损{abs(STOP_LOSS_PCT):.2f}%还有{distance_to_stop_loss:.2f}%")
-                        elif profit_loss_pct > 0:
-                            # 盈利状态，显示距离止盈的距离
-                            if distance_to_take_profit:
-                                print(f"\n   📊 V13风险监控: 当前盈利{profit_loss_pct:.2f}%，距离止盈{TAKE_PROFIT_PCT:.2f}%还有{distance_to_take_profit:.2f}%")
+                        if text_data:
+                            multimodal_result = multimodal_processor.process(
+                                time_series_data=closes[-60:],
+                                text_data=text_data
+                            )
+                            print(f"   🌐 V10多模态处理: 情感={multimodal_result.get('sentiment', {}).get('polarity', 0):.2f}")
+                    except Exception as e:
+                        print(f"   ⚠️  多模态处理失败: {e}")
+                
+                # ========== V10: 全息动态模型 ==========
+                holographic_signal = None
+                if holographic_model and ENABLE_HOLOGRAPHIC:
+                    try:
+                        fallback_used = False
+                        holographic_result = holographic_model.process(
+                            time_series_data=closes[-60:],
+                            text_data=sample_texts[text_index % len(sample_texts)],
+                            technical_indicators=indicator_summary,
+                            market_intelligence=None
+                        )
+                        holographic_signal_raw = holographic_result.get('comprehensive_signal') if holographic_result else None
+                        if holographic_signal_raw and isinstance(holographic_signal_raw, dict):
+                            raw_conf = float(holographic_signal_raw.get('confidence', 0) or 0.0)
+                            if raw_conf <= 0.05:
+                                fallback_used = True
+                            holographic_signal = refine_holographic_signal(
+                                holographic_signal_raw,
+                                closes=closes,
+                                indicator_summary=indicator_summary,
+                                fallback_used=fallback_used
+                            )
+                            print(f"   🌟 V10全息信号: {holographic_signal.get('signal', 'hold')} (置信度={holographic_signal.get('confidence', 0):.2f}, 原始={holographic_signal_raw.get('signal','?')}, 原置信度={raw_conf:.2f})")
+                            reason = holographic_signal.get('reason')
+                            if reason:
+                                print(f"      💡 全息理由: {reason}")
                         else:
-                            print(f"\n   📊 V13风险监控: 当前盈亏{profit_loss_pct:.2f}% (成本价: {current_cost_price:.4f}元)")
-            else:
-                # 没有成本价，提示用户设置
-                if iteration_count == 1 or iteration_count % 10 == 0:  # 第1轮或每10轮提示一次
-                    print(f"\n   💡 V13风险控制提示: 当前持仓{shares_held:.2f}股，但未设置成本价，无法执行止损止盈检查")
-                    print(f"      📝 请在持仓编辑器(http://127.0.0.1:{WEB_EDITOR_PORT})中设置「成本价」或「实际买入价」以启用止损止盈功能")
-                    print(f"      ⚙️  止损设置: {STOP_LOSS_PCT}% | 止盈设置: {TAKE_PROFIT_PCT}%")
-        
-        # ========== V13: 凯利公式资金管理 ==========
-        kelly_info = None
-        if ENABLE_KELLY_FORMULA and USE_KELLY_FOR_POSITION:
-            # 计算预测收益率
-            predicted_return_pct = 0.0
-            if transformer_prediction is not None:
-                predicted_return_pct = ((transformer_prediction - current_price) / current_price) * 100
-            
-            # 计算波动率（用于估算平均亏损）
-            volatility_pct = None
-            if len(closes) >= 20:
-                recent_returns = np.diff(closes[-20:]) / closes[-20:-1] * 100
-                volatility_pct = np.std(recent_returns) if len(recent_returns) > 0 else None
-            
-            # 计算凯利公式最优仓位（支持样本不足时的预测估算）
-            kelly_info = get_kelly_position_size(
-                confidence, predicted_return_pct, trade_history, 
-                indicator_summary, volatility_pct
-            )
-            
-            if kelly_info:
-                kelly_position = kelly_info['kelly_position']
-                is_estimated = kelly_info.get('is_estimated', False)
+                            holographic_signal = {'signal': 'hold', 'confidence': 0.15, 'reason': '无信号'}
+                            print(f"   🌟 V10全息信号: hold (置信度=0.15，原因: 无信号)")
+                    except Exception as e:
+                        print(f"   ⚠️  全息模型处理失败: {e}")
                 
-                if is_estimated:
-                    # 样本不足，使用预测估算
-                    print(f"\n   📊 V13凯利公式资金管理（预测估算模式）:")
-                    print(f"      🎯 最优仓位: {kelly_position*100:.1f}% (基于模型预测估算)")
-                    print(f"      ⚠️  注意: 当前交易样本不足（{len(trade_history)}/{KELLY_MIN_SAMPLES}），使用预测数据估算")
-                    print(f"      📈 估算胜率: {kelly_info['win_rate']*100:.1f}% (基于置信度{confidence:.2f}和预测收益率{predicted_return_pct:.2f}%)")
-                    print(f"      💰 估算平均盈利: {kelly_info['avg_win_pct']:.2f}% | 估算平均亏损: {kelly_info['avg_loss_pct']:.2f}%")
-                    print(f"      📊 原始凯利值: {kelly_info['raw_kelly']*100:.1f}% | 安全凯利值: {kelly_info['safe_kelly']*100:.1f}%")
-                    print(f"      💡 建议: 根据凯利公式（预测模式），当前最优仓位为{kelly_position*100:.1f}%")
-                    print(f"      📝 提示: 积累{KELLY_MIN_SAMPLES}个交易样本后，将使用历史统计数据进行更准确的仓位计算")
-                else:
-                    # 样本充足，使用历史统计
-                    print(f"\n   📊 V13凯利公式资金管理（历史统计模式）:")
-                    print(f"      🎯 最优仓位: {kelly_position*100:.1f}% (基于历史交易统计)")
-                    print(f"      📈 历史胜率: {kelly_info['win_rate']*100:.1f}% ({kelly_info['total_trades']}次交易)")
-                    print(f"      💰 平均盈利: {kelly_info['avg_win_pct']:.2f}% | 平均亏损: {kelly_info['avg_loss_pct']:.2f}%")
-                    print(f"      📊 原始凯利值: {kelly_info['raw_kelly']*100:.1f}% | 安全凯利值: {kelly_info['safe_kelly']*100:.1f}%")
-                    print(f"      💡 建议: 根据凯利公式，当前最优仓位为{kelly_position*100:.1f}%")
-        
-        # ========== V11: 仓位价格建议 ==========
-        suggested_buy_price = None
-        suggested_sell_price = None
-        price_suggestions = calculate_position_price_suggestions(
-            current_price, lstm_prediction, transformer_prediction, confidence, final_action, closes
-        )
-        if price_suggestions:
-            suggestions = price_suggestions['suggestions']
-            
-            # 获取当前价格对应的建议仓位
-            current_position_pct = price_suggestions.get('current_position_pct', 50.0)
-            current_position = f"{current_position_pct:.0f}%"
-            
-            # 计算当前价格与各仓位价格的差异，找出最接近的仓位
-            price_levels = [suggestions['100%'], suggestions['75%'], suggestions['50%'], suggestions['25%'], suggestions['0%']]
-            position_labels = ['100%', '75%', '50%', '25%', '0%']
-            
-            # 找到当前价格最接近的仓位价格
-            closest_price = min(price_levels, key=lambda x: abs(x - current_price))
-            closest_index = price_levels.index(closest_price)
-            closest_position = position_labels[closest_index]
-            price_diff_from_closest = abs(current_price - closest_price)
-            price_diff_pct_from_closest = (price_diff_from_closest / current_price * 100) if current_price > 0 else 0
-            
-            print(f"\n   💡 仓位价格建议（基于预测价格 {price_suggestions['predicted_price']:.2f}元，预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）:")
-            print(f"      🟢 100%仓位: {suggestions['100%']:.2f}元 (价格越低，买入越多)")
-            print(f"      🟡 75%仓位:  {suggestions['75%']:.2f}元")
-            print(f"      🟠 50%仓位:  {suggestions['50%']:.2f}元")
-            print(f"      🟤 25%仓位:  {suggestions['25%']:.2f}元")
-            print(f"      ⚪ 0%仓位:   {suggestions['0%']:.2f}元 (价格越高，卖出越多)")
-            
-            # 计算相邻仓位的最小价格差
-            min_diff_pct = min([abs(price_levels[i] - price_levels[i+1]) / current_price * 100 
-                               for i in range(len(price_levels)-1)]) if current_price > 0 else 0
-            
-            # 优先根据融合决策生成建议，而不是仅仅基于价格位置
-            # 融合决策是更重要的信号，价格建议应该与之保持一致
-            action_hint = ""
-            consistency_note = ""
-            
-            # 计算当前价格与预测价格的偏离程度
-            price_diff_from_pred = abs(current_price - price_suggestions['predicted_price']) / price_suggestions['predicted_price'] * 100 if price_suggestions['predicted_price'] > 0 else 0
-            
-            # V12优化：根据融合决策和预测方向确定建议，考虑冲突检测结果
-            # 如果检测到冲突并已调整，仓位建议应该反映调整后的决策
-            if conflict_info and conflict_info.get('has_conflict', False):
-                # 检测到冲突并已调整决策，仓位建议应该与调整后的决策一致
-                # 根据调整原因确定正确的建议
-                adjustment_reason = conflict_info.get('adjustment_reason', '')
+                # ========== V12: 智能融合决策（优化版：增加冲突检测） ==========
+                conflict_info = None
+                if ENABLE_MULTI_MODEL_FUSION:
+                    final_action, confidence, adjusted_weights, conflict_info = fuse_multi_model_predictions(
+                        ppo_action, lstm_prediction, transformer_prediction,
+                        holographic_signal, MODEL_WEIGHTS.copy(), current_price
+                    )
+                    final_operation = map_action_to_operation(final_action)
+                    stock_name = get_stock_name(STOCK_CODE)
+                    print(f"\n   ⭐ V12融合决策 [{stock_name}({STOCK_CODE})]: {final_operation} (置信度={confidence:.2f})")
                 
-                if final_action == 4 or "调整为持有" in adjustment_reason:  # 已调整为持有
-                    action_hint = f"⚠️  由于预测方向与PPO建议冲突，已调整为「持有」。建议保持当前仓位或降低至50%以下"
-                    consistency_note = f"⚠️  已根据预测方向调整决策（预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）"
-                elif final_action == 3 or "调整为卖出" in adjustment_reason:  # 已调整为卖出25%
-                    action_hint = f"⚠️  由于预测价格明显下跌，已调整为「卖出25%」。建议减仓至25%仓位或更低"
-                    consistency_note = f"⚠️  已根据预测方向调整决策（预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）"
-                elif final_action == 5 or "降低买入力度" in adjustment_reason:  # 已降低买入力度
-                    action_hint = f"⚠️  由于预测方向与PPO建议冲突，已降低买入力度至「买入25%」。建议买入至75%仓位，而非满仓"
-                    consistency_note = f"⚠️  已根据预测方向调整决策（预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）"
-                else:
-                    # 其他调整情况
-                    action_hint = f"⚠️  已根据预测方向调整决策为「{final_operation}」"
-                    consistency_note = f"⚠️  已根据预测方向调整决策（预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）"
-            elif final_action == 6:  # 买入 100%（无冲突）
-                if price_diff_from_pred >= 3.0:
-                    # 价格偏离较大，根据实际价格位置动态调整
-                    if current_price > price_suggestions['predicted_price']:
-                        # 当前价格高于预测价格，建议减仓
-                        if current_position_pct <= 25:
-                            action_hint = f"⚠️  当前价格 {current_price:.2f}元 高于预测价格 {price_suggestions['predicted_price']:.2f}元（偏离{price_diff_from_pred:.2f}%），建议减仓至{current_position}仓位（价格偏离较大，动态调整）"
-                        elif current_position_pct <= 50:
-                            action_hint = f"⚠️  当前价格 {current_price:.2f}元 高于预测价格 {price_suggestions['predicted_price']:.2f}元（偏离{price_diff_from_pred:.2f}%），建议保持{current_position}仓位（价格偏离较大，动态调整）"
+                # V12下跌预测检测：当预测下跌2%或3%以上时，提示做空处理（有区分度）
+                price_change_pct_for_warning = None
+                avg_prediction_for_warning = None
+                if conflict_info and conflict_info.get('price_change_pct') is not None:
+                    price_change_pct_for_warning = conflict_info.get('price_change_pct', 0)
+                    avg_prediction_for_warning = conflict_info.get('avg_prediction', current_price)
+                elif lstm_prediction is not None or transformer_prediction is not None:
+                    # 如果没有conflict_info，使用LSTM/Transformer预测计算
+                    predictions = []
+                    if lstm_prediction is not None and lstm_prediction > 0:
+                        predictions.append(lstm_prediction)
+                    if transformer_prediction is not None and transformer_prediction > 0:
+                        predictions.append(transformer_prediction)
+                    if predictions:
+                        avg_prediction_for_warning = np.mean(predictions)
+                        price_change_pct_for_warning = (avg_prediction_for_warning - current_price) / current_price * 100 if current_price > 0 else 0
+                
+                # 区分2%和3%的提示：3%以上显示严重警告，2-3%显示一般警告
+                if price_change_pct_for_warning is not None and price_change_pct_for_warning <= -3.0:
+                    # 下跌3%以上：严重警告
+                    print(f"\n   🚨 V12严重下跌预警（≥3%）:")
+                    print(f"      📉 预测价格大幅下跌: {abs(price_change_pct_for_warning):.2f}% (预测价格: {avg_prediction_for_warning:.2f}元, 当前价格: {current_price:.2f}元)")
+                    print(f"      ⚠️  强烈建议：开盘立即卖出，在最低点再买回")
+                    print(f"      🔄 做空处理：强烈建议进行做空操作以规避大幅下跌风险")
+                    print(f"      🛑 风险提示：下跌幅度较大，请务必谨慎操作，严格执行止损")
+                elif price_change_pct_for_warning is not None and price_change_pct_for_warning <= -2.0:
+                    # 下跌2-3%：一般警告
+                    print(f"\n   ⚠️  V12下跌预警（2-3%）:")
+                    print(f"      📉 预测价格下跌: {abs(price_change_pct_for_warning):.2f}% (预测价格: {avg_prediction_for_warning:.2f}元, 当前价格: {current_price:.2f}元)")
+                    print(f"      💡 建议：可考虑开盘卖出，在最低点再买回")
+                    print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
+                    print(f"      ⚠️  风险提示：下跌幅度中等，请注意风险控制")
+                
+                # V12优化：显示冲突检测和调整信息
+                if conflict_info and conflict_info.get('has_conflict', False):
+                    print(f"   ⚠️  信号冲突检测:")
+                    if conflict_info.get('avg_prediction') is not None:
+                        price_change_pct = conflict_info.get('price_change_pct', 0)
+                        direction = "下跌" if price_change_pct < 0 else "上涨"
+                        print(f"      📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs(price_change_pct):.2f}%）")
+                    print(f"      🎯 PPO原始建议: {map_action_to_operation(conflict_info.get('original_action', ppo_action))}")
+                    if conflict_info.get('adjustment_reason'):
+                        print(f"      💡 调整原因: {conflict_info['adjustment_reason']}")
+                    print(f"      ✅ 调整后决策: {final_operation}")
+                elif conflict_info and conflict_info.get('avg_prediction') is not None:
+                    # 无冲突，显示预测信息
+                    price_change_pct = conflict_info.get('price_change_pct', 0)
+                    direction = "上涨" if price_change_pct > 0 else "下跌"
+                    abs_price_change = abs(price_change_pct)
+                    
+                    # V12优化：更详细地说明预测方向与决策的关系
+                    if abs_price_change < 1.5:
+                        # 预测方向不明确（<1.5%），说明为何未触发冲突检测
+                        if price_change_pct < 0:
+                            print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），预测方向不明确，未触发冲突检测，与PPO建议一致")
                         else:
-                            action_hint = f"✅ 融合决策「买入 100%」但当前价格 {current_price:.2f}元 高于预测价格（偏离{price_diff_from_pred:.2f}%），建议保持{current_position}仓位"
-                        consistency_note = f"⚠️  价格偏离预测价格{price_diff_from_pred:.2f}%，已动态调整建议仓位"
+                            print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），与PPO建议一致")
                     else:
-                        # 当前价格低于预测价格，建议加仓
-                        action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 低于预测价格（偏离{price_diff_from_pred:.2f}%），建议加仓至{current_position}仓位"
-                        consistency_note = "✅ 与融合决策「买入 100%」一致"
-                else:
-                    # 价格偏离较小，遵循融合决策
-                    if current_price <= suggestions['75%']:
-                        action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 在买入区间，建议满仓买入"
-                    elif current_price <= suggestions['50%']:
-                        action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 接近买入区间，建议高仓位买入（目标100%仓位）"
+                        # 预测方向明确但一致
+                        print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），与PPO建议方向一致")
+                
+                    if ENABLE_DYNAMIC_WEIGHTS:
+                        print(f"   📊 动态权重: PPO={adjusted_weights['ppo']:.1%}, LSTM={adjusted_weights['lstm']:.1%}, Transformer={adjusted_weights['transformer']:.1%}, 全息={adjusted_weights['holographic']:.1%}")
                     else:
-                        action_hint = f"✅ 融合决策「买入 100%」：虽然当前价格 {current_price:.2f}元 略高于预测价格，但模型建议买入，可考虑分批买入或等待回调至 {suggestions['75%']:.2f}元 以下"
-                    consistency_note = "✅ 与融合决策「买入 100%」一致"
-                
-            elif final_action == 5:  # 买入 25%
-                if current_price <= suggestions['75%']:
-                    action_hint = f"✅ 融合决策「买入 25%」+ 当前价格 {current_price:.2f}元 在买入区间，建议买入至75%仓位"
+                        print(f"   📊 模型权重: PPO={MODEL_WEIGHTS['ppo']:.1%}, LSTM={MODEL_WEIGHTS['lstm']:.1%}, Transformer={MODEL_WEIGHTS['transformer']:.1%}, 全息={MODEL_WEIGHTS['holographic']:.1%}")
                 else:
-                    action_hint = f"✅ 融合决策「买入 25%」：当前价格 {current_price:.2f}元，建议买入至75%仓位（可等待回调至 {suggestions['75%']:.2f}元 以下）"
-                consistency_note = "✅ 与融合决策「买入 25%」一致"
+                    final_action = ppo_action
+                    final_operation = ppo_operation
                 
-            elif final_action == 4:  # 持有
-                if suggestions['25%'] <= current_price <= suggestions['75%']:
-                    action_hint = f"✅ 融合决策「持有」+ 当前价格 {current_price:.2f}元 在合理区间，建议保持当前仓位"
-                else:
-                    action_hint = f"✅ 融合决策「持有」：当前价格 {current_price:.2f}元，建议保持50%左右仓位"
-                consistency_note = "✅ 与融合决策「持有」一致"
+                # ========== V16: 趋势/震荡双策略加权融合 ==========
+                if ENABLE_REGIME_STRATEGY and current_price > 0 and closes is not None and len(closes) >= max(TREND_BREAKOUT_WINDOW, BOLL_PERIOD):
+                    regime, trend_score, range_score, boll_info = detect_market_regime(
+                        closes, current_price, transformer_prediction, confidence, holographic_signal
+                    )
+                    trend_bias, breakout_price = trend_strategy_signal(closes, current_price)
+                    mr_bias, mr_upper, mr_ma, mr_lower = mean_reversion_signal(closes, current_price)
+                    
+                    adjust = 0
+                    reason = ""
+                if regime == 'trend' and trend_bias > 0:
+                    adjust += TREND_ADJUST_STEP
+                    reason = f"趋势突破(>{TREND_BREAKOUT_WINDOW}窗高点)，增强买入"
+                elif regime == 'range':
+                    if mr_bias > 0:
+                        adjust += 1
+                        reason = "震荡下轨附近，倾向买入"
+                    elif mr_bias < 0:
+                        adjust -= 1
+                        reason = "震荡上轨附近，倾向卖出"
                 
-            elif final_action == 3:  # 卖出 25%
-                if current_price >= suggestions['25%']:
-                    action_hint = f"✅ 融合决策「卖出 25%」+ 当前价格 {current_price:.2f}元 在卖出区间，建议减仓至25%仓位"
-                else:
-                    action_hint = f"✅ 融合决策「卖出 25%」：当前价格 {current_price:.2f}元，建议减仓至25%仓位（可等待反弹至 {suggestions['25%']:.2f}元 以上）"
-                consistency_note = "✅ 与融合决策「卖出 25%」一致"
+                adjust = int(np.clip(adjust, -REGIME_MAX_ADJUST, REGIME_MAX_ADJUST))
+                if adjust != 0 and final_action is not None:
+                    original_action = final_action
+                    final_action = int(np.clip(final_action + adjust, 0, 6))
+                    final_operation = map_action_to_operation(final_action)
+                    bandwidth_str = f"{boll_info['bandwidth']:.4f}" if boll_info else "N/A"
+                    print(f"\n   🧭 V16市场状态: {regime} (trend_score={trend_score:.2f}, range_score={range_score:.2f}, 带宽={bandwidth_str})")
+                    if reason:
+                        print(f"      💡 策略调整: {reason} | 动作 {original_action} -> {final_action} ({final_operation})")
+                elif regime != 'neutral':
+                    bandwidth_str = f"{boll_info['bandwidth']:.4f}" if boll_info else "N/A"
+                    print(f"\n   🧭 V16市场状态: {regime} (trend_score={trend_score:.2f}, range_score={range_score:.2f}, 带宽={bandwidth_str}) 无需调整")
                 
-            elif final_action <= 2:  # 卖出 50% 或更多
-                if current_price >= suggestions['25%']:
-                    action_hint = f"✅ 融合决策「卖出」+ 当前价格 {current_price:.2f}元 在卖出区间，建议大幅减仓或清仓"
-                else:
-                    action_hint = f"✅ 融合决策「卖出」：虽然当前价格 {current_price:.2f}元 略低于预测价格，但模型建议卖出，可考虑减仓或等待反弹至 {suggestions['25%']:.2f}元 以上"
-                consistency_note = "✅ 与融合决策「卖出」一致"
+                # ========== V13: 止损止盈风险控制 ==========
+                stop_loss_info = None
+                if ENABLE_STOP_LOSS_TAKE_PROFIT and shares_held > 0:
+                    # 获取成本价
+                    portfolio_state_for_stop = load_portfolio_state()
+                    current_cost_price = None
+                    if portfolio_state_for_stop and portfolio_state_for_stop.get('stock_code') == STOCK_CODE:
+                        cost_price_val = portfolio_state_for_stop.get('cost_price')
+                        actual_buy_price_val = portfolio_state_for_stop.get('actual_buy_price')
+                        if cost_price_val and isinstance(cost_price_val, (int, float)) and cost_price_val > 0:
+                            current_cost_price = float(cost_price_val)
+                    elif actual_buy_price_val and isinstance(actual_buy_price_val, (int, float)) and actual_buy_price_val > 0:
+                        current_cost_price = float(actual_buy_price_val)
                 
-            else:
-                # 如果没有明确的融合决策，则基于价格位置判断
-                if current_price < suggestions['100%']:
-                    action_hint = f"当前价格 {current_price:.2f}元 低于100%仓位价格，建议满仓买入"
-                elif current_price > suggestions['0%']:
-                    action_hint = f"当前价格 {current_price:.2f}元 高于0%仓位价格，建议全部卖出"
-                elif price_diff_pct_from_closest < 0.5:
-                    action_hint = f"当前价格 {current_price:.2f}元 接近{closest_position}仓位价格（{closest_price:.2f}元），建议调整为{closest_position}仓位"
-                else:
-                    if current_price <= suggestions['75%']:
-                        action_hint = f"当前价格 {current_price:.2f}元 在75%-100%仓位区间，建议高仓位持有"
-                    elif current_price <= suggestions['50%']:
-                        action_hint = f"当前价格 {current_price:.2f}元 在50%-75%仓位区间，建议中等仓位持有"
-                    elif current_price <= suggestions['25%']:
-                        action_hint = f"当前价格 {current_price:.2f}元 在25%-50%仓位区间，建议低仓位持有"
+                if current_cost_price and current_cost_price > 0:
+                    # 应用止损止盈逻辑
+                    final_action, stop_loss_info = apply_stop_loss_take_profit(
+                        final_action, current_price, current_cost_price, shares_held, atr_value=atr_value
+                    )
+                    final_operation = map_action_to_operation(final_action)
+                    
+                    # 显示止损止盈信息
+                    if stop_loss_info and stop_loss_info.get('triggered', False):
+                        profit_loss_pct = stop_loss_info.get('profit_loss_pct', 0)
+                        reason = stop_loss_info.get('reason', '')
+                        original_action = stop_loss_info.get('original_action')
+                        atr_stop_price_val = stop_loss_info.get('atr_stop_price')
+                        
+                        print(f"\n   🚨 V13止损止盈风险控制:")
+                        print(f"      ⚠️  {reason}")
+                        if original_action is not None:
+                            print(f"      📊 原始决策: {map_action_to_operation(original_action)}")
+                        print(f"      ✅ 调整后决策: {final_operation}")
+                        print(f"      💰 当前盈亏: {profit_loss_pct:+.2f}% (成本价: {current_cost_price:.4f}元, 当前价: {current_price:.2f}元)")
+                        if atr_stop_price_val:
+                            print(f"      🛡️  ATR动态止损价: {atr_stop_price_val:.2f}元 (ATR×{ATR_MULTIPLIER})")
                     else:
-                        action_hint = f"当前价格 {current_price:.2f}元 在0%-25%仓位区间，建议轻仓或空仓"
-                consistency_note = "基于价格位置判断"
-            
-            print(f"   📌 {action_hint}")
-            print(f"   📊 {consistency_note}")
-            
-            # V12优化：显示明确的买入/卖出价格建议
-            target_position = None  # 目标仓位
-            
-            # 根据最终决策确定目标仓位和对应的价格
-            if final_action == 6:  # 买入100%（目标100%仓位）
-                suggested_buy_price = suggestions['100%']
-                target_position = "100%"
-            elif final_action == 5:  # 买入25%（目标75%仓位）
-                suggested_buy_price = suggestions['75%']
-                target_position = "75%"
-            elif final_action == 4:  # 持有（目标50%仓位）
-                # 持有操作，显示当前价格对应的合理仓位价格
-                target_position = "50%"
-                # 不显示买入/卖出价格，因为建议持有
-            elif final_action == 3:  # 卖出25%（目标75%仓位，即保留75%）
-                suggested_sell_price = suggestions['25%']  # 卖出到25%仓位对应的价格
-                target_position = "75%"
-            elif final_action == 2:  # 卖出50%（目标50%仓位）
-                suggested_sell_price = suggestions['50%']
-                target_position = "50%"
-            elif final_action == 1:  # 卖出75%（目标25%仓位）
-                suggested_sell_price = suggestions['25%']
-                target_position = "25%"
-            elif final_action == 0:  # 卖出100%（目标0%仓位）
-                suggested_sell_price = suggestions['0%']
-                target_position = "0%"
-            
-            # 显示买入价格建议
-            if suggested_buy_price:
-                buy_price_diff = suggested_buy_price - current_price
-                buy_price_diff_pct = (buy_price_diff / current_price * 100) if current_price > 0 else 0
-                print(f"   💰 建议买入价格: {suggested_buy_price:.2f}元 (目标仓位: {target_position}, 当前价格: {current_price:.2f}元, 差异: {buy_price_diff:+.2f}元 ({buy_price_diff_pct:+.2f}%))")
-            
-            # 显示卖出价格建议
-            if suggested_sell_price:
-                sell_price_diff = suggested_sell_price - current_price
-                sell_price_diff_pct = (sell_price_diff / current_price * 100) if current_price > 0 else 0
-                print(f"   💰 建议卖出价格: {suggested_sell_price:.2f}元 (目标仓位: {target_position}, 当前价格: {current_price:.2f}元, 差异: {sell_price_diff:+.2f}元 ({sell_price_diff_pct:+.2f}%))")
-            
-            # 持有操作显示当前价格对应的合理仓位
-            if final_action == 4 and target_position:
-                print(f"   💰 持有建议: 当前价格 {current_price:.2f}元 在合理区间，建议保持{target_position}仓位（合理价格区间: {suggestions['25%']:.2f}元 - {suggestions['75%']:.2f}元）")
-            
-            print(f"   📊 价格区间 {price_suggestions['price_interval_pct']:.2f}%（基于预测价格和波动率{price_suggestions['volatility_pct']:.2f}%），相邻仓位价格差至少 {min_diff_pct:.2f}%")
-            print(f"   💡 提示: 价格建议基于预测价格 {price_suggestions['predicted_price']:.2f}元，当前价格 {current_price:.2f}元 与预测价格差异 {abs(current_price - price_suggestions['predicted_price']) / price_suggestions['predicted_price'] * 100:.2f}%")
-            
-            # V12优化：根据持仓情况和预测结果给出具体操作建议
-            print(f"\n   📋 具体操作建议（基于当前持仓和预测结果）:")
-            print(f"      💼 当前持仓: {shares_held:.2f}股 | 可用资金: {current_balance:.2f}元 | 总资产: {current_balance + shares_held * current_price:.2f}元")
-            
-            # 根据最终决策计算具体操作建议
-            if suggested_buy_price and final_action >= 4:  # 买入操作
-                # 计算目标仓位对应的买入数量
-                if final_action == 6:  # 买入100%
-                    target_pct = 1.0
-                    target_shares = (current_balance + shares_held * current_price) / suggested_buy_price if suggested_buy_price > 0 else 0
-                    buy_shares = max(0, target_shares - shares_held)
-                elif final_action == 5:  # 买入50%
-                    target_pct = 0.5
-                    target_shares = ((current_balance + shares_held * current_price) * target_pct) / suggested_buy_price if suggested_buy_price > 0 else 0
-                    buy_shares = max(0, target_shares - shares_held)
-                elif final_action == 4:  # 买入25%
-                    target_pct = 0.75  # 买入25%意味着目标仓位75%
-                    target_shares = ((current_balance + shares_held * current_price) * target_pct) / suggested_buy_price if suggested_buy_price > 0 else 0
-                    buy_shares = max(0, target_shares - shares_held)
+                        # 显示当前盈亏状态（未触发止损止盈）
+                        profit_loss_pct = stop_loss_info.get('profit_loss_pct', 0) if stop_loss_info else None
+                        atr_stop_price_val = stop_loss_info.get('atr_stop_price') if stop_loss_info else None
+                        if profit_loss_pct is not None:
+                            # 计算距离止损止盈的距离
+                            distance_to_stop_loss = abs(STOP_LOSS_PCT - profit_loss_pct) if profit_loss_pct < 0 else None
+                            distance_to_take_profit = abs(TAKE_PROFIT_PCT - profit_loss_pct) if profit_loss_pct > 0 else None
+                            if atr_stop_price_val:
+                                atr_gap = (current_price - atr_stop_price_val)
+                                atr_gap_pct = atr_gap / current_price * 100 if current_price > 0 else None
+                                print(f"   🛡️  ATR动态止损价: {atr_stop_price_val:.2f}元 (当前价与ATR止损差距: {atr_gap:+.2f}元, {atr_gap_pct:+.2f}% )")
+                            
+                            if profit_loss_pct < 0:
+                                # 亏损状态，显示距离止损的距离
+                                if distance_to_stop_loss:
+                                    print(f"\n   📊 V13风险监控: 当前亏损{abs(profit_loss_pct):.2f}%，距离止损{abs(STOP_LOSS_PCT):.2f}%还有{distance_to_stop_loss:.2f}%")
+                            elif profit_loss_pct > 0:
+                                # 盈利状态，显示距离止盈的距离
+                                if distance_to_take_profit:
+                                    print(f"\n   📊 V13风险监控: 当前盈利{profit_loss_pct:.2f}%，距离止盈{TAKE_PROFIT_PCT:.2f}%还有{distance_to_take_profit:.2f}%")
+                            else:
+                                print(f"\n   📊 V13风险监控: 当前盈亏{profit_loss_pct:.2f}% (成本价: {current_cost_price:.4f}元)")
                 else:
-                    buy_shares = 0
+                    # 没有成本价，提示用户设置
+                    if iteration_count == 1 or iteration_count % 10 == 0:  # 第1轮或每10轮提示一次
+                        print(f"\n   💡 V13风险控制提示: 当前持仓{shares_held:.2f}股，但未设置成本价，无法执行止损止盈检查")
+                        print(f"      📝 请在持仓编辑器(http://127.0.0.1:{WEB_EDITOR_PORT})中设置「成本价」或「实际买入价」以启用止损止盈功能")
+                        print(f"      ⚙️  止损设置: {STOP_LOSS_PCT}% | 止盈设置: {TAKE_PROFIT_PCT}%")
                 
-                if buy_shares > 0:
-                    # 计算实际买入金额（考虑滑点和手续费）
-                    buy_amount = buy_shares * suggested_buy_price
-                    adjusted_buy_price = suggested_buy_price * (1 + SLIPPAGE_RATE)
-                    actual_buy_amount = buy_shares * adjusted_buy_price
-                    commission = max(MIN_COMMISSION, actual_buy_amount * COMMISSION_RATE)
-                    transfer_fee = actual_buy_amount * TRANSFER_FEE_RATE
-                    total_fee = commission + transfer_fee
-                    total_cost = actual_buy_amount + total_fee
+                # ========== V13: 凯利公式资金管理 ==========
+                kelly_info = None
+                if ENABLE_KELLY_FORMULA and USE_KELLY_FOR_POSITION:
+                    # 计算预测收益率
+                    predicted_return_pct = 0.0
+                    if transformer_prediction is not None:
+                        predicted_return_pct = ((transformer_prediction - current_price) / current_price) * 100
                     
-                    # 如果资金不足，调整买入数量
-                    if total_cost > current_balance:
-                        available_amount = max(0, current_balance - MIN_COMMISSION)
-                        buy_shares = round_to_lot(available_amount / adjusted_buy_price) if adjusted_buy_price > 0 else 0
-                        actual_buy_amount = buy_shares * adjusted_buy_price
-                        commission = max(MIN_COMMISSION, actual_buy_amount * COMMISSION_RATE) if buy_shares > 0 else 0.0
-                        transfer_fee = actual_buy_amount * TRANSFER_FEE_RATE if buy_shares > 0 else 0.0
-                        total_fee = commission + transfer_fee
-                        total_cost = actual_buy_amount + total_fee
+                    # 计算波动率（用于估算平均亏损）
+                    volatility_pct = None
+                    if len(closes) >= 20:
+                        recent_returns = np.diff(closes[-20:]) / closes[-20:-1] * 100
+                        volatility_pct = np.std(recent_returns) if len(recent_returns) > 0 else None
                     
-                    print(f"      🟢 建议买入:")
-                    print(f"         💰 建议价格: {suggested_buy_price:.2f}元")
-                    print(f"         📊 建议数量: {buy_shares:.0f}股（约{buy_shares:.2f}股）")
-                    print(f"         💵 预计金额: {actual_buy_amount:.2f}元")
-                    print(f"         💸 手续费: {total_fee:.2f}元（佣金{commission:.2f}元 + 过户费{transfer_fee:.2f}元）")
-                    print(f"         💰 总成本: {total_cost:.2f}元")
-                    if total_cost > current_balance:
-                        print(f"         ⚠️  资金不足，已调整为可买入数量（可用资金: {current_balance:.2f}元）")
-                    print(f"         📈 买入后持仓: {shares_held + buy_shares:.2f}股 | 剩余资金: {current_balance - total_cost:.2f}元")
-            
-            elif suggested_sell_price and final_action <= 2:  # 卖出操作
-                # 计算目标仓位对应的卖出数量
-                if final_action == 0:  # 卖出100%
-                    sell_pct = 1.0
-                elif final_action == 1:  # 卖出75%
-                    sell_pct = 0.75
-                elif final_action == 2:  # 卖出25%
-                    sell_pct = 0.25
-                else:
-                    sell_pct = 0
+                    # 计算凯利公式最优仓位（支持样本不足时的预测估算）
+                    kelly_info = get_kelly_position_size(
+                        confidence, predicted_return_pct, trade_history, 
+                        indicator_summary, volatility_pct
+                    )
                 
-                sell_shares = round_to_lot(shares_held * sell_pct) if sell_pct > 0 else 0
-                
-                if sell_shares > 0:
-                    # 计算实际卖出金额（考虑滑点、手续费和印花税）
-                    adjusted_sell_price = suggested_sell_price * (1 - SLIPPAGE_RATE)
-                    actual_sell_amount = sell_shares * adjusted_sell_price
-                    commission = max(MIN_COMMISSION, actual_sell_amount * COMMISSION_RATE)
-                    transfer_fee = actual_sell_amount * TRANSFER_FEE_RATE
-                    stamp_tax = actual_sell_amount * STAMP_DUTY_RATE
-                    total_fee = commission + transfer_fee + stamp_tax
-                    net_proceeds = actual_sell_amount - total_fee
+                if kelly_info:
+                    kelly_position = kelly_info['kelly_position']
+                    is_estimated = kelly_info.get('is_estimated', False)
                     
-                    print(f"      🔴 建议卖出:")
-                    print(f"         💰 建议价格: {suggested_sell_price:.2f}元")
-                    print(f"         📊 建议数量: {sell_shares:.0f}股（约{sell_shares:.2f}股，占持仓{sell_pct*100:.0f}%）")
-                    print(f"         💵 预计金额: {actual_sell_amount:.2f}元")
-                    print(f"         💸 手续费: {total_fee:.2f}元（佣金{commission:.2f}元 + 过户费{transfer_fee:.2f}元 + 印花税{stamp_tax:.2f}元）")
-                    print(f"         💰 净收益: {net_proceeds:.2f}元")
-                    print(f"         📉 卖出后持仓: {shares_held - sell_shares:.2f}股 | 可用资金: {current_balance + net_proceeds:.2f}元")
-            
-            elif final_action == 3:  # 持有操作
-                print(f"      ⚪ 建议持有:")
-                print(f"         💼 当前持仓: {shares_held:.2f}股")
-                print(f"         💵 当前资金: {current_balance:.2f}元")
-                print(f"         📊 建议保持当前仓位，等待更好的买入/卖出时机")
-                if target_position:
-                    print(f"         💡 目标仓位: {target_position}（合理价格区间: {suggestions['25%']:.2f}元 - {suggestions['75%']:.2f}元）")
-            
-            # V12优化：显示不同价格区间的操作建议（25%、50%、75%、100%仓位）
-            print(f"\n   📊 不同价格区间的操作建议:")
-            
-            # 判断当前价格是否适合立即操作
-            should_buy_now = False
-            should_sell_now = False
-            if suggested_buy_price and final_action >= 4:
-                # 如果当前价格低于或接近建议买入价格，可以考虑买入
-                if current_price <= suggested_buy_price * 1.02:  # 允许2%的偏差
-                    should_buy_now = True
-            elif suggested_sell_price and final_action <= 2:
-                # 如果当前价格高于或接近建议卖出价格，可以考虑卖出
-                if current_price >= suggested_sell_price * 0.98:  # 允许2%的偏差
-                    should_sell_now = True
-            
-            # 显示买入建议（梯度买入：价格越低，买入越多）- V12优化：总是显示买入建议，方便按价格灵活选择
-            print(f"      🟢 梯度买入建议（价格越低，买入越多）:")
-            
-            # 计算价格区间
-            min_price = suggestions['100%']
-            max_price = suggestions['0%']
-            price_range = max_price - min_price
-            
-            # 定义梯度买入档位（12个档位，从100%到10%仓位）
-            gradient_levels = [
+                    if is_estimated:
+                        # 样本不足，使用预测估算
+                        print(f"\n   📊 V13凯利公式资金管理（预测估算模式）:")
+                        print(f"      🎯 最优仓位: {kelly_position*100:.1f}% (基于模型预测估算)")
+                        print(f"      ⚠️  注意: 当前交易样本不足（{len(trade_history)}/{KELLY_MIN_SAMPLES}），使用预测数据估算")
+                        print(f"      📈 估算胜率: {kelly_info['win_rate']*100:.1f}% (基于置信度{confidence:.2f}和预测收益率{predicted_return_pct:.2f}%)")
+                        print(f"      💰 估算平均盈利: {kelly_info['avg_win_pct']:.2f}% | 估算平均亏损: {kelly_info['avg_loss_pct']:.2f}%")
+                        print(f"      📊 原始凯利值: {kelly_info['raw_kelly']*100:.1f}% | 安全凯利值: {kelly_info['safe_kelly']*100:.1f}%")
+                        print(f"      💡 建议: 根据凯利公式（预测模式），当前最优仓位为{kelly_position*100:.1f}%")
+                        print(f"      📝 提示: 积累{KELLY_MIN_SAMPLES}个交易样本后，将使用历史统计数据进行更准确的仓位计算")
+                    else:
+                        # 样本充足，使用历史统计
+                        print(f"\n   📊 V13凯利公式资金管理（历史统计模式）:")
+                        print(f"      🎯 最优仓位: {kelly_position*100:.1f}% (基于历史交易统计)")
+                        print(f"      📈 历史胜率: {kelly_info['win_rate']*100:.1f}% ({kelly_info['total_trades']}次交易)")
+                        print(f"      💰 平均盈利: {kelly_info['avg_win_pct']:.2f}% | 平均亏损: {kelly_info['avg_loss_pct']:.2f}%")
+                        print(f"      📊 原始凯利值: {kelly_info['raw_kelly']*100:.1f}% | 安全凯利值: {kelly_info['safe_kelly']*100:.1f}%")
+                        print(f"      💡 建议: 根据凯利公式，当前最优仓位为{kelly_position*100:.1f}%")
+                
+                # ========== V11: 仓位价格建议 ==========
+                suggested_buy_price = None
+                suggested_sell_price = None
+                price_suggestions = calculate_position_price_suggestions(
+                    current_price, lstm_prediction, transformer_prediction, confidence, final_action, closes
+                )
+                if price_suggestions:
+                    suggestions = price_suggestions['suggestions']
+                    
+                    # 获取当前价格对应的建议仓位
+                    current_position_pct = price_suggestions.get('current_position_pct', 50.0)
+                    current_position = f"{current_position_pct:.0f}%"
+                    
+                    # 计算当前价格与各仓位价格的差异，找出最接近的仓位
+                    price_levels = [suggestions['100%'], suggestions['75%'], suggestions['50%'], suggestions['25%'], suggestions['0%']]
+                    position_labels = ['100%', '75%', '50%', '25%', '0%']
+                    
+                    # 找到当前价格最接近的仓位价格
+                    closest_price = min(price_levels, key=lambda x: abs(x - current_price))
+                    closest_index = price_levels.index(closest_price)
+                    closest_position = position_labels[closest_index]
+                    price_diff_from_closest = abs(current_price - closest_price)
+                    price_diff_pct_from_closest = (price_diff_from_closest / current_price * 100) if current_price > 0 else 0
+                    
+                    print(f"\n   💡 仓位价格建议（基于预测价格 {price_suggestions['predicted_price']:.2f}元，预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）:")
+                    print(f"      🟢 100%仓位: {suggestions['100%']:.2f}元 (价格越低，买入越多)")
+                    print(f"      🟡 75%仓位:  {suggestions['75%']:.2f}元")
+                    print(f"      🟠 50%仓位:  {suggestions['50%']:.2f}元")
+                    print(f"      🟤 25%仓位:  {suggestions['25%']:.2f}元")
+                    print(f"      ⚪ 0%仓位:   {suggestions['0%']:.2f}元 (价格越高，卖出越多)")
+                    
+                    # 计算相邻仓位的最小价格差
+                    min_diff_pct = min([abs(price_levels[i] - price_levels[i+1]) / current_price * 100 
+                                       for i in range(len(price_levels)-1)]) if current_price > 0 else 0
+                    
+                    # 优先根据融合决策生成建议，而不是仅仅基于价格位置
+                    # 融合决策是更重要的信号，价格建议应该与之保持一致
+                    action_hint = ""
+                    consistency_note = ""
+                    
+                    # 计算当前价格与预测价格的偏离程度
+                    price_diff_from_pred = abs(current_price - price_suggestions['predicted_price']) / price_suggestions['predicted_price'] * 100 if price_suggestions['predicted_price'] > 0 else 0
+                    
+                    # V12优化：根据融合决策和预测方向确定建议，考虑冲突检测结果
+                    # 如果检测到冲突并已调整，仓位建议应该反映调整后的决策
+                    if conflict_info and conflict_info.get('has_conflict', False):
+                        # 检测到冲突并已调整决策，仓位建议应该与调整后的决策一致
+                        # 根据调整原因确定正确的建议
+                        adjustment_reason = conflict_info.get('adjustment_reason', '')
+                        
+                        if final_action == 4 or "调整为持有" in adjustment_reason:  # 已调整为持有
+                            action_hint = f"⚠️  由于预测方向与PPO建议冲突，已调整为「持有」。建议保持当前仓位或降低至50%以下"
+                            consistency_note = f"⚠️  已根据预测方向调整决策（预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）"
+                        elif final_action == 3 or "调整为卖出" in adjustment_reason:  # 已调整为卖出25%
+                            action_hint = f"⚠️  由于预测价格明显下跌，已调整为「卖出25%」。建议减仓至25%仓位或更低"
+                            consistency_note = f"⚠️  已根据预测方向调整决策（预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）"
+                        elif final_action == 5 or "降低买入力度" in adjustment_reason:  # 已降低买入力度
+                            action_hint = f"⚠️  由于预测方向与PPO建议冲突，已降低买入力度至「买入25%」。建议买入至75%仓位，而非满仓"
+                            consistency_note = f"⚠️  已根据预测方向调整决策（预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）"
+                        else:
+                            # 其他调整情况
+                            action_hint = f"⚠️  已根据预测方向调整决策为「{final_operation}」"
+                            consistency_note = f"⚠️  已根据预测方向调整决策（预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）"
+                    elif final_action == 6:  # 买入 100%（无冲突）
+                        if price_diff_from_pred >= 3.0:
+                            # 价格偏离较大，根据实际价格位置动态调整
+                            if current_price > price_suggestions['predicted_price']:
+                                # 当前价格高于预测价格，建议减仓
+                                if current_position_pct <= 25:
+                                    action_hint = f"⚠️  当前价格 {current_price:.2f}元 高于预测价格 {price_suggestions['predicted_price']:.2f}元（偏离{price_diff_from_pred:.2f}%），建议减仓至{current_position}仓位（价格偏离较大，动态调整）"
+                                elif current_position_pct <= 50:
+                                    action_hint = f"⚠️  当前价格 {current_price:.2f}元 高于预测价格 {price_suggestions['predicted_price']:.2f}元（偏离{price_diff_from_pred:.2f}%），建议保持{current_position}仓位（价格偏离较大，动态调整）"
+                                else:
+                                    action_hint = f"✅ 融合决策「买入 100%」但当前价格 {current_price:.2f}元 高于预测价格（偏离{price_diff_from_pred:.2f}%），建议保持{current_position}仓位"
+                                consistency_note = f"⚠️  价格偏离预测价格{price_diff_from_pred:.2f}%，已动态调整建议仓位"
+                            else:
+                                # 当前价格低于预测价格，建议加仓
+                                action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 低于预测价格（偏离{price_diff_from_pred:.2f}%），建议加仓至{current_position}仓位"
+                                consistency_note = "✅ 与融合决策「买入 100%」一致"
+                        else:
+                            # 价格偏离较小，遵循融合决策
+                            if current_price <= suggestions['75%']:
+                                action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 在买入区间，建议满仓买入"
+                            elif current_price <= suggestions['50%']:
+                                action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 接近买入区间，建议高仓位买入（目标100%仓位）"
+                            else:
+                                action_hint = f"✅ 融合决策「买入 100%」：虽然当前价格 {current_price:.2f}元 略高于预测价格，但模型建议买入，可考虑分批买入或等待回调至 {suggestions['75%']:.2f}元 以下"
+                            consistency_note = "✅ 与融合决策「买入 100%」一致"
+                    elif final_action == 5:  # 买入 25%
+                        if current_price <= suggestions['75%']:
+                            action_hint = f"✅ 融合决策「买入 25%」+ 当前价格 {current_price:.2f}元 在买入区间，建议买入至75%仓位"
+                        else:
+                            action_hint = f"✅ 融合决策「买入 25%」：当前价格 {current_price:.2f}元，建议买入至75%仓位（可等待回调至 {suggestions['75%']:.2f}元 以下）"
+                        consistency_note = "✅ 与融合决策「买入 25%」一致"
+                        
+                    elif final_action == 4:  # 持有
+                        if suggestions['25%'] <= current_price <= suggestions['75%']:
+                            action_hint = f"✅ 融合决策「持有」+ 当前价格 {current_price:.2f}元 在合理区间，建议保持当前仓位"
+                        else:
+                            action_hint = f"✅ 融合决策「持有」：当前价格 {current_price:.2f}元，建议保持50%左右仓位"
+                        consistency_note = "✅ 与融合决策「持有」一致"
+                        
+                    elif final_action == 3:  # 卖出 25%
+                        if current_price >= suggestions['25%']:
+                            action_hint = f"✅ 融合决策「卖出 25%」+ 当前价格 {current_price:.2f}元 在卖出区间，建议减仓至25%仓位"
+                        else:
+                            action_hint = f"✅ 融合决策「卖出 25%」：当前价格 {current_price:.2f}元，建议减仓至25%仓位（可等待反弹至 {suggestions['25%']:.2f}元 以上）"
+                        consistency_note = "✅ 与融合决策「卖出 25%」一致"
+                        
+                    elif final_action <= 2:  # 卖出 50% 或更多
+                        if current_price >= suggestions['25%']:
+                            action_hint = f"✅ 融合决策「卖出」+ 当前价格 {current_price:.2f}元 在卖出区间，建议大幅减仓或清仓"
+                        else:
+                            action_hint = f"✅ 融合决策「卖出」：虽然当前价格 {current_price:.2f}元 略低于预测价格，但模型建议卖出，可考虑减仓或等待反弹至 {suggestions['25%']:.2f}元 以上"
+                        consistency_note = "✅ 与融合决策「卖出」一致"
+                        
+                    else:
+                        # 如果没有明确的融合决策，则基于价格位置判断
+                        if current_price < suggestions['100%']:
+                            action_hint = f"当前价格 {current_price:.2f}元 低于100%仓位价格，建议满仓买入"
+                        elif current_price > suggestions['0%']:
+                            action_hint = f"当前价格 {current_price:.2f}元 高于0%仓位价格，建议全部卖出"
+                        elif price_diff_pct_from_closest < 0.5:
+                            action_hint = f"当前价格 {current_price:.2f}元 接近{closest_position}仓位价格（{closest_price:.2f}元），建议调整为{closest_position}仓位"
+                        else:
+                            if current_price <= suggestions['75%']:
+                                action_hint = f"当前价格 {current_price:.2f}元 在75%-100%仓位区间，建议高仓位持有"
+                            elif current_price <= suggestions['50%']:
+                                action_hint = f"当前价格 {current_price:.2f}元 在50%-75%仓位区间，建议中等仓位持有"
+                            elif current_price <= suggestions['25%']:
+                                action_hint = f"当前价格 {current_price:.2f}元 在25%-50%仓位区间，建议低仓位持有"
+                            else:
+                                action_hint = f"当前价格 {current_price:.2f}元 在0%-25%仓位区间，建议轻仓或空仓"
+                        consistency_note = "基于价格位置判断"
+                    
+                    print(f"   📌 {action_hint}")
+                    print(f"   📊 {consistency_note}")
+                    
+                    # V12优化：显示明确的买入/卖出价格建议
+                    target_position = None  # 目标仓位
+                    
+                    # 根据最终决策确定目标仓位和对应的价格
+                    if final_action == 6:  # 买入100%（目标100%仓位）
+                        suggested_buy_price = suggestions['100%']
+                        target_position = "100%"
+                    elif final_action == 5:  # 买入25%（目标75%仓位）
+                        suggested_buy_price = suggestions['75%']
+                        target_position = "75%"
+                    elif final_action == 4:  # 持有（目标50%仓位）
+                        # 持有操作，显示当前价格对应的合理仓位价格
+                        target_position = "50%"
+                        # 不显示买入/卖出价格，因为建议持有
+                    elif final_action == 3:  # 卖出25%（目标75%仓位，即保留75%）
+                        suggested_sell_price = suggestions['25%']  # 卖出到25%仓位对应的价格
+                        target_position = "75%"
+                    elif final_action == 2:  # 卖出50%（目标50%仓位）
+                        suggested_sell_price = suggestions['50%']
+                        target_position = "50%"
+                    elif final_action == 1:  # 卖出75%（目标25%仓位）
+                        suggested_sell_price = suggestions['25%']
+                        target_position = "25%"
+                    elif final_action == 0:  # 卖出100%（目标0%仓位）
+                        suggested_sell_price = suggestions['0%']
+                        target_position = "0%"
+                    
+                    # 显示买入价格建议
+                    if suggested_buy_price:
+                        buy_price_diff = suggested_buy_price - current_price
+                        buy_price_diff_pct = (buy_price_diff / current_price * 100) if current_price > 0 else 0
+                        print(f"   💰 建议买入价格: {suggested_buy_price:.2f}元 (目标仓位: {target_position}, 当前价格: {current_price:.2f}元, 差异: {buy_price_diff:+.2f}元 ({buy_price_diff_pct:+.2f}%))")
+                    
+                    # 显示卖出价格建议
+                    if suggested_sell_price:
+                        sell_price_diff = suggested_sell_price - current_price
+                        sell_price_diff_pct = (sell_price_diff / current_price * 100) if current_price > 0 else 0
+                        print(f"   💰 建议卖出价格: {suggested_sell_price:.2f}元 (目标仓位: {target_position}, 当前价格: {current_price:.2f}元, 差异: {sell_price_diff:+.2f}元 ({sell_price_diff_pct:+.2f}%))")
+                    
+                    # 持有操作显示当前价格对应的合理仓位
+                    if final_action == 4 and target_position:
+                        print(f"   💰 持有建议: 当前价格 {current_price:.2f}元 在合理区间，建议保持{target_position}仓位（合理价格区间: {suggestions['25%']:.2f}元 - {suggestions['75%']:.2f}元）")
+                    
+                    print(f"   📊 价格区间 {price_suggestions['price_interval_pct']:.2f}%（基于预测价格和波动率{price_suggestions['volatility_pct']:.2f}%），相邻仓位价格差至少 {min_diff_pct:.2f}%")
+                    print(f"   💡 提示: 价格建议基于预测价格 {price_suggestions['predicted_price']:.2f}元，当前价格 {current_price:.2f}元 与预测价格差异 {abs(current_price - price_suggestions['predicted_price']) / price_suggestions['predicted_price'] * 100:.2f}%")
+                    
+                    # V12优化：根据持仓情况和预测结果给出具体操作建议
+                    print(f"\n   📋 具体操作建议（基于当前持仓和预测结果）:")
+                    print(f"      💼 当前持仓: {shares_held:.2f}股 | 可用资金: {current_balance:.2f}元 | 总资产: {current_balance + shares_held * current_price:.2f}元")
+                    
+                    # 根据最终决策计算具体操作建议
+                    if suggested_buy_price and final_action >= 4:  # 买入操作
+                        # 计算目标仓位对应的买入数量
+                        if final_action == 6:  # 买入100%
+                            target_pct = 1.0
+                            target_shares = (current_balance + shares_held * current_price) / suggested_buy_price if suggested_buy_price > 0 else 0
+                            buy_shares = max(0, target_shares - shares_held)
+                        elif final_action == 5:  # 买入50%
+                            target_pct = 0.5
+                            target_shares = ((current_balance + shares_held * current_price) * target_pct) / suggested_buy_price if suggested_buy_price > 0 else 0
+                            buy_shares = max(0, target_shares - shares_held)
+                        elif final_action == 4:  # 买入25%
+                            target_pct = 0.75  # 买入25%意味着目标仓位75%
+                            target_shares = ((current_balance + shares_held * current_price) * target_pct) / suggested_buy_price if suggested_buy_price > 0 else 0
+                            buy_shares = max(0, target_shares - shares_held)
+                        else:
+                            buy_shares = 0
+                    
+                        if buy_shares > 0:
+                            # 计算实际买入金额（考虑滑点和手续费）
+                            buy_amount = buy_shares * suggested_buy_price
+                            adjusted_buy_price = suggested_buy_price * (1 + SLIPPAGE_RATE)
+                            actual_buy_amount = buy_shares * adjusted_buy_price
+                            commission = max(MIN_COMMISSION, actual_buy_amount * COMMISSION_RATE)
+                            transfer_fee = actual_buy_amount * TRANSFER_FEE_RATE
+                            total_fee = commission + transfer_fee
+                            total_cost = actual_buy_amount + total_fee
+                            
+                            # 如果资金不足，调整买入数量
+                            if total_cost > current_balance:
+                                available_amount = max(0, current_balance - MIN_COMMISSION)
+                                buy_shares = round_to_lot(available_amount / adjusted_buy_price) if adjusted_buy_price > 0 else 0
+                                actual_buy_amount = buy_shares * adjusted_buy_price
+                                commission = max(MIN_COMMISSION, actual_buy_amount * COMMISSION_RATE) if buy_shares > 0 else 0.0
+                                transfer_fee = actual_buy_amount * TRANSFER_FEE_RATE if buy_shares > 0 else 0.0
+                                total_fee = commission + transfer_fee
+                                total_cost = actual_buy_amount + total_fee
+                            
+                            print(f"      🟢 建议买入:")
+                            print(f"         💰 建议价格: {suggested_buy_price:.2f}元")
+                            print(f"         📊 建议数量: {buy_shares:.0f}股（约{buy_shares:.2f}股）")
+                            print(f"         💵 预计金额: {actual_buy_amount:.2f}元")
+                            print(f"         💸 手续费: {total_fee:.2f}元（佣金{commission:.2f}元 + 过户费{transfer_fee:.2f}元）")
+                            print(f"         💰 总成本: {total_cost:.2f}元")
+                            if total_cost > current_balance:
+                                print(f"         ⚠️  资金不足，已调整为可买入数量（可用资金: {current_balance:.2f}元）")
+                            print(f"         📈 买入后持仓: {shares_held + buy_shares:.2f}股 | 剩余资金: {current_balance - total_cost:.2f}元")
+                    
+                    elif suggested_sell_price and final_action <= 2:  # 卖出操作
+                        # 计算目标仓位对应的卖出数量
+                        if final_action == 0:  # 卖出100%
+                            sell_pct = 1.0
+                        elif final_action == 1:  # 卖出75%
+                            sell_pct = 0.75
+                        elif final_action == 2:  # 卖出25%
+                            sell_pct = 0.25
+                        else:
+                            sell_pct = 0
+                        
+                        sell_shares = round_to_lot(shares_held * sell_pct) if sell_pct > 0 else 0
+                        
+                        if sell_shares > 0:
+                            # 计算实际卖出金额（考虑滑点、手续费和印花税）
+                            adjusted_sell_price = suggested_sell_price * (1 - SLIPPAGE_RATE)
+                            actual_sell_amount = sell_shares * adjusted_sell_price
+                            commission = max(MIN_COMMISSION, actual_sell_amount * COMMISSION_RATE)
+                            transfer_fee = actual_sell_amount * TRANSFER_FEE_RATE
+                            stamp_tax = actual_sell_amount * STAMP_DUTY_RATE
+                            total_fee = commission + transfer_fee + stamp_tax
+                            net_proceeds = actual_sell_amount - total_fee
+                            
+                            print(f"      🔴 建议卖出:")
+                            print(f"         💰 建议价格: {suggested_sell_price:.2f}元")
+                            print(f"         📊 建议数量: {sell_shares:.0f}股（约{sell_shares:.2f}股，占持仓{sell_pct*100:.0f}%）")
+                            print(f"         💵 预计金额: {actual_sell_amount:.2f}元")
+                            print(f"         💸 手续费: {total_fee:.2f}元（佣金{commission:.2f}元 + 过户费{transfer_fee:.2f}元 + 印花税{stamp_tax:.2f}元）")
+                            print(f"         💰 净收益: {net_proceeds:.2f}元")
+                            print(f"         📉 卖出后持仓: {shares_held - sell_shares:.2f}股 | 可用资金: {current_balance + net_proceeds:.2f}元")
+                    
+                    elif final_action == 3:  # 持有操作
+                        print(f"      ⚪ 建议持有:")
+                        print(f"         💼 当前持仓: {shares_held:.2f}股")
+                        print(f"         💵 当前资金: {current_balance:.2f}元")
+                        print(f"         📊 建议保持当前仓位，等待更好的买入/卖出时机")
+                        if target_position:
+                            print(f"         💡 目标仓位: {target_position}（合理价格区间: {suggestions['25%']:.2f}元 - {suggestions['75%']:.2f}元）")
+                    
+                    # V12优化：显示不同价格区间的操作建议（25%、50%、75%、100%仓位）
+                    print(f"\n   📊 不同价格区间的操作建议:")
+                    
+                    # 判断当前价格是否适合立即操作
+                    should_buy_now = False
+                    should_sell_now = False
+                    if suggested_buy_price and final_action >= 4:
+                        # 如果当前价格低于或接近建议买入价格，可以考虑买入
+                        if current_price <= suggested_buy_price * 1.02:  # 允许2%的偏差
+                            should_buy_now = True
+                    elif suggested_sell_price and final_action <= 2:
+                        # 如果当前价格高于或接近建议卖出价格，可以考虑卖出
+                        if current_price >= suggested_sell_price * 0.98:  # 允许2%的偏差
+                            should_sell_now = True
+                    
+                    # 显示买入建议（梯度买入：价格越低，买入越多）- V12优化：总是显示买入建议，方便按价格灵活选择
+                    print(f"      🟢 梯度买入建议（价格越低，买入越多）:")
+                    
+                    # 计算价格区间
+                    min_price = suggestions['100%']
+                    max_price = suggestions['0%']
+                    price_range = max_price - min_price
+                    
+                    # 定义梯度买入档位（12个档位，从100%到10%仓位）
+                    gradient_levels = [
                 (100, 1.00, "🔥 满仓"),  # 100%仓位，使用100%资金
                 (90, 0.90, "🟢 重仓"),   # 90%仓位，使用90%资金
                 (80, 0.80, "🟢 重仓"),   # 80%仓位，使用80%资金
@@ -4996,58 +5274,58 @@ while True:
                 (20, 0.20, "⚪ 轻仓"),   # 20%仓位，使用20%资金
                 (10, 0.10, "⚪ 轻仓"),   # 10%仓位，使用10%资金
             ]
-            
-            # 计算每个档位的价格（从最低价格到最高价格，仓位从100%到10%）
-            for position_pct, buy_pct, label in gradient_levels:
-                # 计算该仓位对应的价格位置（从100%到0%）
-                price_position = (100 - position_pct) / 100.0  # 0.0对应100%仓位（最低价），1.0对应0%仓位（最高价）
-                gradient_price = min_price + price_range * price_position
-                
-                if gradient_price > 0:
-                    price_diff = gradient_price - current_price
-                    price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
                     
-                    # 计算买入数量和成本
-                    shares_bought, total_cost, total_fee, adj_price = calc_buy_trade(gradient_price, buy_pct, current_balance)
+                    # 计算每个档位的价格（从最低价格到最高价格，仓位从100%到10%）
+                    for position_pct, buy_pct, label in gradient_levels:
+                        # 计算该仓位对应的价格位置（从100%到0%）
+                        price_position = (100 - position_pct) / 100.0  # 0.0对应100%仓位（最低价），1.0对应0%仓位（最高价）
+                        gradient_price = min_price + price_range * price_position
+                        
+                        if gradient_price > 0:
+                            price_diff = gradient_price - current_price
+                            price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
+                            
+                            # 计算买入数量和成本
+                            shares_bought, total_cost, total_fee, adj_price = calc_buy_trade(gradient_price, buy_pct, current_balance)
+                            
+                            if shares_bought > 0:
+                                # 判断操作状态
+                                if abs(price_diff_pct) <= 1.0:  # 价格差异在1%以内，可以买入
+                                    status = "✅ 可买入"
+                                elif price_diff < 0 and abs(price_diff_pct) <= 2.0:  # 当前价格高于建议价格，但在2%以内
+                                    status = "⚠️  可考虑"
+                                elif price_diff < 0:  # 当前价格明显高于建议价格
+                                    status = "⏳ 等待回调"
+                                else:  # 当前价格低于建议价格，等待更好价格
+                                    status = "⏳ 等待更好价格"
+                                
+                                # 只显示价格差异在合理范围内的建议（避免显示太多不相关的价格点）
+                                if abs(price_diff_pct) <= 5.0 or (price_diff < 0 and price_diff_pct >= -3.0):
+                                    # 简化显示格式：一行显示关键信息
+                                    print(f"         {status} {position_pct:3d}%仓位 ({label:4s}): {gradient_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 买入{int(shares_bought):4d}股 ({buy_pct*100:3.0f}%资金, 成本{total_cost:.2f}元)")
                     
-                    if shares_bought > 0:
-                        # 判断操作状态
-                        if abs(price_diff_pct) <= 1.0:  # 价格差异在1%以内，可以买入
-                            status = "✅ 可买入"
-                        elif price_diff < 0 and abs(price_diff_pct) <= 2.0:  # 当前价格高于建议价格，但在2%以内
-                            status = "⚠️  可考虑"
-                        elif price_diff < 0:  # 当前价格明显高于建议价格
-                            status = "⏳ 等待回调"
-                        else:  # 当前价格低于建议价格，等待更好价格
-                            status = "⏳ 等待更好价格"
-                        
-                        # 只显示价格差异在合理范围内的建议（避免显示太多不相关的价格点）
-                        if abs(price_diff_pct) <= 5.0 or (price_diff < 0 and price_diff_pct >= -3.0):
-                            # 简化显示格式：一行显示关键信息
-                            print(f"         {status} {position_pct:3d}%仓位 ({label:4s}): {gradient_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 买入{int(shares_bought):4d}股 ({buy_pct*100:3.0f}%资金, 成本{total_cost:.2f}元)")
-            
-            # 显示0%仓位参考价（空仓提示）
-            zero_price = suggestions['0%']
-            if zero_price:
-                price_diff = zero_price - current_price
-                price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
-                print(f"         ⚪ 0%仓位 (空仓): {zero_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 不买入，保持空仓")
-                        
-            # 显示梯度买入策略说明
-            print(f"\n         💡 梯度买入策略说明:")
-            print(f"            - 价格越低，买入仓位越高（分散买入，降低风险）")
-            print(f"            - 建议在不同价格档位分批买入，不要一次性满仓")
-            print(f"            - 如果价格继续下跌，可以逐步加仓；如果价格上涨，可以逐步减仓")
-            
-            # 显示卖出建议（梯度卖出：价格越高，卖出越多）- V12优化：总是显示卖出建议（有持仓时），方便按价格灵活选择
-            if shares_held > 0:
-                # V12优化：从持仓状态获取成本价，用于计算真实盈亏
-                portfolio_state_for_cost = load_portfolio_state()
-                current_cost_price = None
-                if portfolio_state_for_cost and portfolio_state_for_cost.get('stock_code') == STOCK_CODE:
-                    # 优先使用 cost_price，如果没有则使用 actual_buy_price，都不存在则为 None（不使用 last_price）
-                    cost_price_val = portfolio_state_for_cost.get('cost_price')
-                    actual_buy_price_val = portfolio_state_for_cost.get('actual_buy_price')
+                    # 显示0%仓位参考价（空仓提示）
+                    zero_price = suggestions['0%']
+                    if zero_price:
+                        price_diff = zero_price - current_price
+                        price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
+                        print(f"         ⚪ 0%仓位 (空仓): {zero_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 不买入，保持空仓")
+                                
+                    # 显示梯度买入策略说明
+                    print(f"\n         💡 梯度买入策略说明:")
+                    print(f"            - 价格越低，买入仓位越高（分散买入，降低风险）")
+                    print(f"            - 建议在不同价格档位分批买入，不要一次性满仓")
+                    print(f"            - 如果价格继续下跌，可以逐步加仓；如果价格上涨，可以逐步减仓")
+                    
+                    # 显示卖出建议（梯度卖出：价格越高，卖出越多）- V12优化：总是显示卖出建议（有持仓时），方便按价格灵活选择
+                    if shares_held > 0:
+                        # V12优化：从持仓状态获取成本价，用于计算真实盈亏
+                        portfolio_state_for_cost = load_portfolio_state()
+                        current_cost_price = None
+                        if portfolio_state_for_cost and portfolio_state_for_cost.get('stock_code') == STOCK_CODE:
+                            # 优先使用 cost_price，如果没有则使用 actual_buy_price，都不存在则为 None（不使用 last_price）
+                            cost_price_val = portfolio_state_for_cost.get('cost_price')
+                            actual_buy_price_val = portfolio_state_for_cost.get('actual_buy_price')
                     
                     # 确保值存在且大于0
                     if cost_price_val and isinstance(cost_price_val, (int, float)) and cost_price_val > 0:
@@ -5162,274 +5440,372 @@ while True:
                         
                         print(f"         🔥 0%仓位 (全卖): {zero_price:6.2f}元 | 当前{current_price:.2f}元 (差异{price_diff:+.2f}元, {price_diff_pct:+.2f}%) | 卖出全部{int(shares_sold_all):4d}股 → 保留 0股")
                 
-                # 显示梯度卖出策略说明
-                print(f"\n         💡 梯度卖出策略说明:")
-                print(f"            - 价格越高，卖出仓位越高（分批卖出，锁定利润）")
-                print(f"            - 建议在不同价格档位分批卖出，不要一次性全部卖出")
-                print(f"            - 如果价格继续上涨，可以逐步减仓；如果价格下跌，可以逐步加仓")
-            else:
-                print(f"      🔴 梯度卖出建议（价格越高，卖出越多）:")
-                print(f"         ⚠️  当前无持仓，无法提供卖出建议")
-        
-        # ========== 更新可视化 ==========
-        if visualizer:
-            try:
-                indicators_dict = {}
-                
-                # 从技术指标摘要中提取指标
-                if indicator_summary:
-                    if 'KDJ' in indicator_summary:
-                        kdj = indicator_summary['KDJ']
-                        if isinstance(kdj, dict):
-                            indicators_dict['KDJ_K'] = kdj.get('K', 0)
-                            indicators_dict['KDJ_D'] = kdj.get('D', 0)
-                            indicators_dict['KDJ_J'] = kdj.get('J', 0)
-                    if 'RSI' in indicator_summary:
-                        indicators_dict['RSI'] = indicator_summary['RSI']
-                    if 'MACD' in indicator_summary:
-                        macd = indicator_summary['MACD']
-                        if isinstance(macd, dict):
-                            indicators_dict['MACD'] = macd.get('MACD', 0)
-                    if 'OBV' in indicator_summary:
-                        obv = indicator_summary['OBV']
-                        if isinstance(obv, dict):
-                            indicators_dict['OBV_Ratio'] = obv.get('OBV_Ratio', 1.0)
-                
-                # 如果技术指标计算失败，从原始数据计算简单指标
-                if not indicators_dict and len(closes) >= 5:
-                    try:
-                        # 计算简单的移动平均线
-                        ma5 = np.mean(closes[-5:]) if len(closes) >= 5 else current_price
-                        ma10 = np.mean(closes[-10:]) if len(closes) >= 10 else current_price
-                        ma20 = np.mean(closes[-20:]) if len(closes) >= 20 else current_price
+                        # 显示梯度卖出策略说明
+                        print(f"\n         💡 梯度卖出策略说明:")
+                        print(f"            - 价格越高，卖出仓位越高（分批卖出，锁定利润）")
+                        print(f"            - 建议在不同价格档位分批卖出，不要一次性全部卖出")
+                        print(f"            - 如果价格继续上涨，可以逐步减仓；如果价格下跌，可以逐步加仓")
+                    else:
+                        print(f"      🔴 梯度卖出建议（价格越高，卖出越多）:")
+                        print(f"         ⚠️  当前无持仓，无法提供卖出建议")
+                    
+                    # ========== 更新可视化 ==========
+                    if visualizer:
+                        try:
+                            indicators_dict = {}
+                            
+                            # 从技术指标摘要中提取指标
+                            if indicator_summary:
+                                if 'KDJ' in indicator_summary:
+                                    kdj = indicator_summary['KDJ']
+                                    if isinstance(kdj, dict):
+                                        indicators_dict['KDJ_K'] = kdj.get('K', 0)
+                                        indicators_dict['KDJ_D'] = kdj.get('D', 0)
+                                        indicators_dict['KDJ_J'] = kdj.get('J', 0)
+                                if 'RSI' in indicator_summary:
+                                    indicators_dict['RSI'] = indicator_summary['RSI']
+                                if 'MACD' in indicator_summary:
+                                    macd = indicator_summary['MACD']
+                                    if isinstance(macd, dict):
+                                        indicators_dict['MACD'] = macd.get('MACD', 0)
+                                if 'OBV' in indicator_summary:
+                                    obv = indicator_summary['OBV']
+                                    if isinstance(obv, dict):
+                                        indicators_dict['OBV_Ratio'] = obv.get('OBV_Ratio', 1.0)
+                            
+                            # 如果技术指标计算失败，从原始数据计算简单指标
+                            if not indicators_dict and len(closes) >= 5:
+                                try:
+                                    # 计算简单的移动平均线
+                                    ma5 = np.mean(closes[-5:]) if len(closes) >= 5 else current_price
+                                    ma10 = np.mean(closes[-10:]) if len(closes) >= 10 else current_price
+                                    ma20 = np.mean(closes[-20:]) if len(closes) >= 20 else current_price
+                                    
+                                    indicators_dict['MA5'] = ma5
+                                    indicators_dict['MA10'] = ma10
+                                    indicators_dict['MA20'] = ma20
+                                    
+                                    # 计算简单的RSI（如果数据足够）
+                                    if len(closes) >= 14:
+                                        try:
+                                            deltas = np.diff(closes[-14:])
+                                            if len(deltas) > 0:
+                                                gains = np.where(deltas > 0, deltas, 0)
+                                                losses = np.where(deltas < 0, -deltas, 0)
+                                                # 只计算非零值的均值，避免空数组警告
+                                                valid_gains = gains[gains > 0]
+                                                valid_losses = losses[losses > 0]
+                                                avg_gain = np.mean(valid_gains) if len(valid_gains) > 0 else 0.0
+                                                avg_loss = np.mean(valid_losses) if len(valid_losses) > 0 else 0.01
+                                                if avg_loss > 0 and not np.isnan(avg_gain) and not np.isnan(avg_loss):
+                                                    rs = avg_gain / avg_loss
+                                                    rsi = 100 - (100 / (1 + rs))
+                                                    if not np.isnan(rsi) and not np.isinf(rsi):
+                                                        indicators_dict['RSI'] = rsi
+                                        except Exception:
+                                            pass  # 如果计算失败，跳过RSI
+                                except Exception as e:
+                                    pass  # 如果计算失败，至少传递空字典
+                            
+                            # 确保至少有一些数据传递给可视化器
+                            visualizer.add_data_point(
+                                price=current_price,
+                                volume=volume,
+                                indicators=indicators_dict if indicators_dict else None,
+                                prediction=transformer_prediction
+                            )
+                            # 调试信息：显示已添加的数据点数量
+                            if iteration_count % 5 == 0:  # 每5轮输出一次
+                                print(f"   📊 可视化数据: 价格点数={len(visualizer.price_history)}, 指标数={len(visualizer.indicators_history)}")
+                        except Exception as e:
+                            print(f"   ⚠️  可视化更新失败: {e}")
+                            import traceback
+                            traceback.print_exc()
+                    
+                    # ========== 更新持仓状态 ==========
+                    total_assets = current_balance + shares_held * current_price
+                    save_portfolio_state(STOCK_CODE, shares_held, current_balance, current_price, initial_balance)
+                    log_trade_operation(
+                        STOCK_CODE, final_operation, current_price,
+                        shares_held, current_balance, total_assets,
+                        status='预测', note=f'V11融合决策'
+                    )
+                    
+                    stock_name = get_stock_name(STOCK_CODE)
+                    print(f"   💼 [{stock_name}({STOCK_CODE})] 持仓: {shares_held:.2f}股 | 资金: {current_balance:.2f}元 | 总资产: {total_assets:.2f}元")
+                    
+                    # ========== V13: 多模型回测和自动选择 ==========
+                    if ENABLE_BACKTEST:
+                        try:
+                            # V13: 记录所有模型的预测值（用于多模型回测）
+                            if ENABLE_AUTO_MODEL_SELECTION and len(candidate_ppo_models) > 0:
+                                # V13策略：使用Transformer预测作为价格预测（Transformer不依赖PPO模型）
+                                # 每个模型使用相同的Transformer预测值，但PPO动作不同
+                                # 我们基于Transformer预测的准确性来评估模型组合的效果
+                                if transformer_prediction is not None:
+                                    # 为所有模型记录相同的Transformer预测值（因为Transformer预测不依赖PPO模型）
+                                    # 实际评估时，我们会考虑PPO动作的准确性
+                                    for model_name in model_backtest_data.keys():
+                                        model_backtest_data[model_name]['predictions'].append(transformer_prediction)
+                                        model_backtest_data[model_name]['timestamps'].append(datetime.datetime.now())
+                                        model_backtest_data[model_name]['actuals'].append(current_price)
+                                
+                                # V13: 定期评估模型并自动切换
+                                if iteration_count % AUTO_MODEL_SELECTION_INTERVAL == 0 and iteration_count > 0:
+                                    print(f"\n   🔄 V13: 开始模型评估（第 {iteration_count} 轮）...")
+                                    best_model_result = select_best_model()
+                                    
+                                    if best_model_result:
+                                        best_model_name = best_model_result['model_name']
+                                        best_score = best_model_result['score']
+                                        best_metrics = best_model_result['metrics']
+                                        
+                                        print(f"   📊 V13模型评估结果:")
+                                        print(f"      🏆 最优模型: {best_model_name} (评分: {best_score:.4f})")
+                                        print(f"      📈 回测指标 (样本数: {best_metrics['sample_count']}):")
+                                        print(f"         MAE: {best_metrics['mae']:.4f} | RMSE: {best_metrics['rmse']:.4f}")
+                                        print(f"         MAPE: {best_metrics['mape']:.2f}% | 方向准确率: {best_metrics['direction_accuracy']:.1f}%")
+                                        
+                                        # 显示所有模型的评分
+                                        if len(best_model_result['all_scores']) > 1:
+                                            print(f"      📋 所有模型评分:")
+                                            sorted_models = sorted(best_model_result['all_scores'].items(), key=lambda x: x[1], reverse=True)
+                                            for model_name, score in sorted_models:
+                                                marker = "🏆" if model_name == best_model_name else "  "
+                                                metrics = best_model_result['all_metrics'].get(model_name, {})
+                                                print(f"         {marker} {model_name}: {score:.4f} (MAE={metrics.get('mae', 0):.4f}, 方向准确率={metrics.get('direction_accuracy', 0):.1f}%)")
+                                        
+                                        # 如果最优模型与当前模型不同，进行切换
+                                        if best_model_name != current_model_name:
+                                            old_model_name = current_model_name
+                                            if switch_to_model(best_model_name):
+                                                print(f"   ✅ V13: 已切换到最优模型: {best_model_name} (原模型: {old_model_name})")
+                                                print(f"      💡 说明: 根据回测结果，{best_model_name} 表现最优，已自动切换")
+                                            else:
+                                                print(f"   ⚠️  V13: 模型切换失败: {best_model_name}")
+                                        else:
+                                            print(f"   ✅ V13: 当前模型 {current_model_name} 仍为最优，无需切换")
+                            else:
+                                print(f"   ⚠️  V13: 模型评估失败（数据不足或所有模型都无有效回测数据）")
+                            
+                            # V12兼容模式：单一模型回测
+                            if not ENABLE_AUTO_MODEL_SELECTION or len(candidate_ppo_models) == 0:
+                                if transformer_prediction is not None:
+                                    backtest_predictions.append(transformer_prediction)
+                                    backtest_timestamps.append(datetime.datetime.now())
+                                    
+                                    # 如果有历史实际值，计算回测指标
+                                    if len(backtest_predictions) > 1 and len(backtest_actuals) > 0:
+                                        # 使用上一轮的实际价格作为当前预测的对比
+                                        if len(backtest_actuals) >= len(backtest_predictions) - 1:
+                                            # 计算最近N次的指标
+                                            n = min(20, len(backtest_predictions) - 1)  # 最近20次
+                                            recent_preds = backtest_predictions[-n-1:-1]  # 排除最新的预测
+                                            recent_actuals = backtest_actuals[-n:]
+                                            
+                                            if len(recent_preds) == len(recent_actuals) and len(recent_preds) > 0:
+                                                try:
+                                                    # 转换为numpy数组并检查有效性
+                                                    preds_array = np.array(recent_preds, dtype=np.float64)
+                                                    actuals_array = np.array(recent_actuals, dtype=np.float64)
+                                                    
+                                                    # 过滤掉NaN和Inf值
+                                                    valid_mask = np.isfinite(preds_array) & np.isfinite(actuals_array) & (actuals_array != 0)
+                                                    if np.sum(valid_mask) > 0:
+                                                        valid_preds = preds_array[valid_mask]
+                                                        valid_actuals = actuals_array[valid_mask]
+                                                        
+                                                        # 计算MAE (Mean Absolute Error)
+                                                        mae = np.mean(np.abs(valid_preds - valid_actuals))
+                                                        
+                                                        # 计算RMSE (Root Mean Squared Error)
+                                                        rmse = np.sqrt(np.mean((valid_preds - valid_actuals)**2))
+                                                        
+                                                        # 计算MAPE (Mean Absolute Percentage Error)
+                                                        mape = np.mean(np.abs((valid_preds - valid_actuals) / valid_actuals)) * 100
+                                                        
+                                                        # 计算方向准确率 (Direction Accuracy)
+                                                        if len(valid_preds) > 1:
+                                                            pred_directions = np.sign(np.diff(valid_preds))
+                                                            actual_directions = np.sign(np.diff(valid_actuals))
+                                                            if len(pred_directions) > 0:
+                                                                direction_accuracy = np.mean(pred_directions == actual_directions) * 100
+                                                            else:
+                                                                direction_accuracy = 0.0
+                                                        else:
+                                                            direction_accuracy = 0.0
+                                                        
+                                                        # 检查结果是否有效
+                                                        if not (np.isnan(mae) or np.isnan(rmse) or np.isnan(mape) or np.isnan(direction_accuracy)):
+                                                            if iteration_count % 10 == 0:  # 每10轮输出一次
+                                                                print(f"\n   📈 V11回测指标 (最近{np.sum(valid_mask)}次有效数据):")
+                                                                print(f"      MAE: {mae:.4f} | RMSE: {rmse:.4f} | MAPE: {mape:.2f}% | 方向准确率: {direction_accuracy:.1f}%")
+                                                except Exception as e:
+                                                    # 静默处理计算错误
+                                                    pass
+                                        
+                                        # 记录当前实际价格（用于下一轮计算）
+                                        backtest_actuals.append(current_price)
                         
-                        indicators_dict['MA5'] = ma5
-                        indicators_dict['MA10'] = ma10
-                        indicators_dict['MA20'] = ma20
+                        except Exception as e:
+                            print(f"   ⚠️  回测计算失败: {e}")
                         
-                        # 计算简单的RSI（如果数据足够）
-                        if len(closes) >= 14:
+                        # ========== V15: DeepSeek 轮次复盘 ==========
+                        if ENABLE_DEEPSEEK_REVIEW and ENABLE_LLM:
                             try:
-                                deltas = np.diff(closes[-14:])
-                                if len(deltas) > 0:
-                                    gains = np.where(deltas > 0, deltas, 0)
-                                    losses = np.where(deltas < 0, -deltas, 0)
-                                    # 只计算非零值的均值，避免空数组警告
-                                    valid_gains = gains[gains > 0]
-                                    valid_losses = losses[losses > 0]
-                                    avg_gain = np.mean(valid_gains) if len(valid_gains) > 0 else 0.0
-                                    avg_loss = np.mean(valid_losses) if len(valid_losses) > 0 else 0.01
-                                    if avg_loss > 0 and not np.isnan(avg_gain) and not np.isnan(avg_loss):
-                                        rs = avg_gain / avg_loss
-                                        rsi = 100 - (100 / (1 + rs))
-                                        if not np.isnan(rsi) and not np.isinf(rsi):
-                                            indicators_dict['RSI'] = rsi
-                            except Exception:
-                                pass  # 如果计算失败，跳过RSI
-                    except Exception as e:
-                        pass  # 如果计算失败，至少传递空字典
-                
-                # 确保至少有一些数据传递给可视化器
-                visualizer.add_data_point(
-                    price=current_price,
-                    volume=volume,
-                    indicators=indicators_dict if indicators_dict else None,
-                    prediction=transformer_prediction
-                )
-                # 调试信息：显示已添加的数据点数量
-                if iteration_count % 5 == 0:  # 每5轮输出一次
-                    print(f"   📊 可视化数据: 价格点数={len(visualizer.price_history)}, 指标数={len(visualizer.indicators_history)}")
+                                predicted_price_val = price_suggestions.get('predicted_price') if price_suggestions else None
+                                predicted_change_pct = price_suggestions.get('price_change_pct') if price_suggestions else None
+                                
+                                kelly_mode = None
+                                kelly_position_val = None
+                                if kelly_info:
+                                    kelly_position_val = kelly_info.get('kelly_position')
+                                    kelly_mode = "预测估算" if kelly_info.get('is_estimated') else "历史统计"
+                                
+                                deepseek_ctx = {
+                                    'stock_name': stock_name,
+                                    'stock_code': STOCK_CODE,
+                                    'data_source': data_source_used,
+                                    'latest_time': latest_time,
+                                    'price_source': price_source,
+                                    'current_price': current_price,
+                                    'shares_held': shares_held,
+                                    'current_balance': current_balance,
+                                    'ppo_action': map_action_to_operation(ppo_action) if 'ppo_action' in locals() else "--",
+                                    'ppo_model': current_model_name,
+                                    'final_operation': final_operation,
+                                    'confidence': confidence,
+                                    'lstm_prediction': lstm_prediction,
+                                    'transformer_prediction': transformer_prediction,
+                                    'holographic_signal': holographic_signal,
+                                    'predicted_price': predicted_price_val,
+                                    'predicted_change': predicted_change_pct,
+                                    'suggested_buy': suggested_buy_price,
+                                    'suggested_sell': suggested_sell_price,
+                                    'kelly_position': kelly_position_val,
+                                    'kelly_mode': kelly_mode
+                                }
+                                
+                                prompt_text = build_deepseek_review_prompt(deepseek_ctx)
+                                review_text = call_deepseek_review(prompt_text)
+                                if review_text:
+                                    print(f"\n   🤖 V15 DeepSeek复盘：")
+                                    for line in review_text.splitlines():
+                                        if line.strip():
+                                            print(f"      {line.strip()}")
+                            except Exception as e:
+                                print(f"   ⚠️  V15 DeepSeek复盘失败: {e}")
+                        
             except Exception as e:
-                print(f"   ⚠️  可视化更新失败: {e}")
+                print(f"   ⚠️  预测过程中发生错误: {e}")
                 import traceback
                 traceback.print_exc()
-        
-        # ========== 更新持仓状态 ==========
-        total_assets = current_balance + shares_held * current_price
-        save_portfolio_state(STOCK_CODE, shares_held, current_balance, current_price, initial_balance)
-        log_trade_operation(
-            STOCK_CODE, final_operation, current_price,
-            shares_held, current_balance, total_assets,
-            status='预测', note=f'V11融合决策'
-        )
-        
-        stock_name = get_stock_name(STOCK_CODE)
-        print(f"   💼 [{stock_name}({STOCK_CODE})] 持仓: {shares_held:.2f}股 | 资金: {current_balance:.2f}元 | 总资产: {total_assets:.2f}元")
-        
-        # ========== V13: 多模型回测和自动选择 ==========
-        if ENABLE_BACKTEST:
+                continue
+            
+            # ========== V16批量预测：保存预测结果到带日期的记录文件 ==========
             try:
-                # V13: 记录所有模型的预测值（用于多模型回测）
-                if ENABLE_AUTO_MODEL_SELECTION and len(candidate_ppo_models) > 0:
-                    # V13策略：使用Transformer预测作为价格预测（Transformer不依赖PPO模型）
-                    # 每个模型使用相同的Transformer预测值，但PPO动作不同
-                    # 我们基于Transformer预测的准确性来评估模型组合的效果
-                    if transformer_prediction is not None:
-                        # 为所有模型记录相同的Transformer预测值（因为Transformer预测不依赖PPO模型）
-                        # 实际评估时，我们会考虑PPO动作的准确性
-                        for model_name in model_backtest_data.keys():
-                            model_backtest_data[model_name]['predictions'].append(transformer_prediction)
-                            model_backtest_data[model_name]['timestamps'].append(datetime.datetime.now())
-                            model_backtest_data[model_name]['actuals'].append(current_price)
-                    
-                    # V13: 定期评估模型并自动切换
-                    if iteration_count % AUTO_MODEL_SELECTION_INTERVAL == 0 and iteration_count > 0:
-                        print(f"\n   🔄 V13: 开始模型评估（第 {iteration_count} 轮）...")
-                        best_model_result = select_best_model()
-                        
-                        if best_model_result:
-                            best_model_name = best_model_result['model_name']
-                            best_score = best_model_result['score']
-                            best_metrics = best_model_result['metrics']
-                            
-                            print(f"   📊 V13模型评估结果:")
-                            print(f"      🏆 最优模型: {best_model_name} (评分: {best_score:.4f})")
-                            print(f"      📈 回测指标 (样本数: {best_metrics['sample_count']}):")
-                            print(f"         MAE: {best_metrics['mae']:.4f} | RMSE: {best_metrics['rmse']:.4f}")
-                            print(f"         MAPE: {best_metrics['mape']:.2f}% | 方向准确率: {best_metrics['direction_accuracy']:.1f}%")
-                            
-                            # 显示所有模型的评分
-                            if len(best_model_result['all_scores']) > 1:
-                                print(f"      📋 所有模型评分:")
-                                sorted_models = sorted(best_model_result['all_scores'].items(), key=lambda x: x[1], reverse=True)
-                                for model_name, score in sorted_models:
-                                    marker = "🏆" if model_name == best_model_name else "  "
-                                    metrics = best_model_result['all_metrics'].get(model_name, {})
-                                    print(f"         {marker} {model_name}: {score:.4f} (MAE={metrics.get('mae', 0):.4f}, 方向准确率={metrics.get('direction_accuracy', 0):.1f}%)")
-                            
-                            # 如果最优模型与当前模型不同，进行切换
-                            if best_model_name != current_model_name:
-                                old_model_name = current_model_name
-                                if switch_to_model(best_model_name):
-                                    print(f"   ✅ V13: 已切换到最优模型: {best_model_name} (原模型: {old_model_name})")
-                                    print(f"      💡 说明: 根据回测结果，{best_model_name} 表现最优，已自动切换")
-                                else:
-                                    print(f"   ⚠️  V13: 模型切换失败: {best_model_name}")
-                            else:
-                                print(f"   ✅ V13: 当前模型 {current_model_name} 仍为最优，无需切换")
-                        else:
-                            print(f"   ⚠️  V13: 模型评估失败（数据不足或所有模型都无有效回测数据）")
+                # 安全获取可能不存在的变量
+                review_text_val = locals().get('review_text', None)
+                regime_val = locals().get('regime', None)
+                trend_score_val = locals().get('trend_score', None)
+                range_score_val = locals().get('range_score', None)
+                volume_val = locals().get('volume', None)
                 
-                # V12兼容模式：单一模型回测
-                elif transformer_prediction is not None:
-                    backtest_predictions.append(transformer_prediction)
-                    backtest_timestamps.append(datetime.datetime.now())
-                    
-                    # 如果有历史实际值，计算回测指标
-                    if len(backtest_predictions) > 1 and len(backtest_actuals) > 0:
-                        # 使用上一轮的实际价格作为当前预测的对比
-                        if len(backtest_actuals) >= len(backtest_predictions) - 1:
-                            # 计算最近N次的指标
-                            n = min(20, len(backtest_predictions) - 1)  # 最近20次
-                            recent_preds = backtest_predictions[-n-1:-1]  # 排除最新的预测
-                            recent_actuals = backtest_actuals[-n:]
-                            
-                            if len(recent_preds) == len(recent_actuals) and len(recent_preds) > 0:
-                                try:
-                                    # 转换为numpy数组并检查有效性
-                                    preds_array = np.array(recent_preds, dtype=np.float64)
-                                    actuals_array = np.array(recent_actuals, dtype=np.float64)
-                                    
-                                    # 过滤掉NaN和Inf值
-                                    valid_mask = np.isfinite(preds_array) & np.isfinite(actuals_array) & (actuals_array != 0)
-                                    if np.sum(valid_mask) > 0:
-                                        valid_preds = preds_array[valid_mask]
-                                        valid_actuals = actuals_array[valid_mask]
-                                        
-                                        # 计算MAE (Mean Absolute Error)
-                                        mae = np.mean(np.abs(valid_preds - valid_actuals))
-                                        
-                                        # 计算RMSE (Root Mean Squared Error)
-                                        rmse = np.sqrt(np.mean((valid_preds - valid_actuals)**2))
-                                        
-                                        # 计算MAPE (Mean Absolute Percentage Error)
-                                        mape = np.mean(np.abs((valid_preds - valid_actuals) / valid_actuals)) * 100
-                                        
-                                        # 计算方向准确率 (Direction Accuracy)
-                                        if len(valid_preds) > 1:
-                                            pred_directions = np.sign(np.diff(valid_preds))
-                                            actual_directions = np.sign(np.diff(valid_actuals))
-                                            if len(pred_directions) > 0:
-                                                direction_accuracy = np.mean(pred_directions == actual_directions) * 100
-                                            else:
-                                                direction_accuracy = 0.0
-                                        else:
-                                            direction_accuracy = 0.0
-                                        
-                                        # 检查结果是否有效
-                                        if not (np.isnan(mae) or np.isnan(rmse) or np.isnan(mape) or np.isnan(direction_accuracy)):
-                                            if iteration_count % 10 == 0:  # 每10轮输出一次
-                                                print(f"\n   📈 V11回测指标 (最近{np.sum(valid_mask)}次有效数据):")
-                                                print(f"      MAE: {mae:.4f} | RMSE: {rmse:.4f} | MAPE: {mape:.2f}% | 方向准确率: {direction_accuracy:.1f}%")
-                                except Exception as e:
-                                    # 静默处理计算错误
-                                    pass
-                    
-                    # 记录当前实际价格（用于下一轮计算）
-                    backtest_actuals.append(current_price)
-                
-            except Exception as e:
-                print(f"   ⚠️  回测计算失败: {e}")
-        
-        # ========== V15: DeepSeek 轮次复盘 ==========
-        if ENABLE_DEEPSEEK_REVIEW and ENABLE_LLM:
-            try:
-                predicted_price_val = price_suggestions.get('predicted_price') if price_suggestions else None
-                predicted_change_pct = price_suggestions.get('price_change_pct') if price_suggestions else None
-                
-                kelly_mode = None
-                kelly_position_val = None
-                if kelly_info:
-                    kelly_position_val = kelly_info.get('kelly_position')
-                    kelly_mode = "预测估算" if kelly_info.get('is_estimated') else "历史统计"
-                
-                deepseek_ctx = {
-                    'stock_name': stock_name,
-                    'stock_code': STOCK_CODE,
-                    'data_source': data_source_used,
-                    'latest_time': latest_time,
-                    'price_source': price_source,
-                    'current_price': current_price,
-                    'shares_held': shares_held,
-                    'current_balance': current_balance,
-                    'ppo_action': map_action_to_operation(ppo_action) if 'ppo_action' in locals() else "--",
-                    'ppo_model': current_model_name,
-                    'final_operation': final_operation,
-                    'confidence': confidence,
-                    'lstm_prediction': lstm_prediction,
-                    'transformer_prediction': transformer_prediction,
-                    'holographic_signal': holographic_signal,
-                    'predicted_price': predicted_price_val,
-                    'predicted_change': predicted_change_pct,
-                    'suggested_buy': suggested_buy_price,
-                    'suggested_sell': suggested_sell_price,
-                    'kelly_position': kelly_position_val,
-                    'kelly_mode': kelly_mode
+                # 收集所有预测数据
+                prediction_data = {
+                    'current_price': float(current_price) if current_price else None,
+                    'price_source': price_source if 'price_source' in locals() else None,
+                    'data_source': data_source_used if 'data_source_used' in locals() else None,
+                    'latest_time': str(latest_time) if 'latest_time' in locals() and latest_time else None,
+                    'volume': float(volume_val) if volume_val else None,
+                    'ppo_action': int(ppo_action) if 'ppo_action' in locals() and ppo_action is not None else None,
+                    'ppo_operation': map_action_to_operation(ppo_action) if 'ppo_action' in locals() and ppo_action is not None else None,
+                    'ppo_model': current_model_name if 'current_model_name' in locals() else None,
+                    'lstm_prediction': float(lstm_prediction) if 'lstm_prediction' in locals() and lstm_prediction is not None else None,
+                    'transformer_prediction': float(transformer_prediction) if 'transformer_prediction' in locals() and transformer_prediction is not None else None,
+                    'holographic_signal': holographic_signal.get('signal') if 'holographic_signal' in locals() and holographic_signal else None,
+                    'holographic_confidence': float(holographic_signal.get('confidence', 0)) if 'holographic_signal' in locals() and holographic_signal else None,
+                    'final_action': int(final_action) if 'final_action' in locals() and final_action is not None else None,
+                    'final_operation': final_operation if 'final_operation' in locals() else None,
+                    'confidence': float(confidence) if 'confidence' in locals() and confidence else None,
+                    'predicted_price': float(price_suggestions.get('predicted_price')) if 'price_suggestions' in locals() and price_suggestions and price_suggestions.get('predicted_price') else None,
+                    'predicted_change_pct': float(price_suggestions.get('price_change_pct')) if 'price_suggestions' in locals() and price_suggestions and price_suggestions.get('price_change_pct') else None,
+                    'predicted_direction': price_suggestions.get('direction') if 'price_suggestions' in locals() and price_suggestions else None,
+                    'suggested_buy_price': float(suggested_buy_price) if 'suggested_buy_price' in locals() and suggested_buy_price else None,
+                    'suggested_sell_price': float(suggested_sell_price) if 'suggested_sell_price' in locals() and suggested_sell_price else None,
+                    'shares_held': float(shares_held) if 'shares_held' in locals() and shares_held else 0.0,
+                    'current_balance': float(current_balance) if 'current_balance' in locals() and current_balance else 0.0,
+                    'total_assets': float(current_balance + shares_held * current_price) if 'current_balance' in locals() and 'shares_held' in locals() and 'current_price' in locals() and current_price else None,
+                    'initial_balance': float(initial_balance) if 'initial_balance' in locals() and initial_balance else None,
+                    'kelly_position': float(kelly_info.get('kelly_position')) if 'kelly_info' in locals() and kelly_info and kelly_info.get('kelly_position') else None,
+                    'kelly_mode': "预测估算" if ('kelly_info' in locals() and kelly_info and kelly_info.get('is_estimated')) else ("历史统计" if ('kelly_info' in locals() and kelly_info) else None),
+                    'deepseek_review': review_text_val if review_text_val else None,
+                    'atr_value': float(atr_value) if 'atr_value' in locals() and atr_value else None,
+                    'regime': regime_val if regime_val else None,
+                    'trend_score': float(trend_score_val) if trend_score_val is not None else None,
+                    'range_score': float(range_score_val) if range_score_val is not None else None,
                 }
                 
-                prompt_text = build_deepseek_review_prompt(deepseek_ctx)
-                review_text = call_deepseek_review(prompt_text)
-                if review_text:
-                    print(f"\n   🤖 V15 DeepSeek复盘：")
-                    for line in review_text.splitlines():
-                        if line.strip():
-                            print(f"      {line.strip()}")
+                # 保存预测结果
+                if save_batch_predict_result(STOCK_CODE, stock_name, prediction_data):
+                    print(f"   ✅ 预测结果已保存到: {get_batch_predict_result_file()}")
             except Exception as e:
-                print(f"   ⚠️  V15 DeepSeek复盘失败: {e}")
-        
-        print(f"{'='*70}\n")
-        
-        # 等待下一轮
-        time.sleep(300)  # 5分钟更新一次
-        
-    except KeyboardInterrupt:
-        print("\n\n⚠️  用户中断，正在保存状态...")
-        break
-    except Exception as e:
-        print(f"\n❌ 发生错误: {e}")
-        import traceback
-        traceback.print_exc()
-        time.sleep(60)
+                print(f"   ⚠️  保存预测结果失败: {e}")
+                import traceback
+                traceback.print_exc()
+            
+            print(f"{'='*70}\n")
+            
+            # 批量预测：保存该股票的完整输出到日志文件
+            try:
+                captured_output = output_capture.get_output()
+                if captured_output:
+                    append_to_log_file(captured_output, log_file)
+                    append_to_log_file("", log_file)  # 添加空行分隔
+            except Exception as e:
+                print(f"   ⚠️  保存日志输出失败: {e}")
+            
+            # 批量预测：每个股票只运行一次，不等待，直接继续下一个股票
+            
+            except Exception as e:
+                print(f"\n❌ [{stock_name}({STOCK_CODE})] 预测过程中发生错误: {e}")
+                import traceback
+                traceback.print_exc()
+                # 继续处理下一个股票，不中断整个批量预测
+                continue
+except KeyboardInterrupt:
+    print("\n\n⚠️  用户中断，正在保存状态...")
+    # 保存已捕获的输出
+    try:
+        captured_output = output_capture.get_output()
+        if captured_output:
+            append_to_log_file(captured_output, log_file)
+    except:
+        pass
+    # 用户中断，退出批量预测
+    import sys
+    sys.exit(0)
+except Exception as e:
+    print(f"\n❌ [{stock_name}({STOCK_CODE})] 发生错误: {e}")
+    import traceback
+    traceback.print_exc()
+    # 保存错误时的输出
+    try:
+        captured_output = output_capture.get_output()
+        if captured_output:
+            append_to_log_file(captured_output, log_file)
+            append_to_log_file(f"❌ 发生错误: {e}", log_file)
+    except:
+        pass
+        # 继续处理下一个股票，不中断整个批量预测
+        # continue 语句在 except 块内，但这是在 for 循环外，所以不需要 continue
+
+# 批量预测完成
+print("\n" + "=" * 70)
+print("✅ V16批量预测完成")
+print("=" * 70)
+print(f"📊 已处理 {len(STOCK_LIST)} 个股票")
+print("=" * 70)
 
 # 清理资源
 print("\n🔄 正在清理资源...")
@@ -5439,5 +5815,5 @@ if web_visualization:
     except:
         pass
 
-print("✅ V11系统已停止")
+print("✅ V16批量预测系统已停止")
 

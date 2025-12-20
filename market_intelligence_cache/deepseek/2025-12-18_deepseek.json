@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": 0.2,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.3,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.0,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "预计2025年底中国经济处于温和复苏阶段，政策支持持续但效力边际递减，市场情绪谨慎乐观；全球地缘政治不确定性及主要央行政策分化，导致国际联动增强且波动率维持在中等偏高水平。",
+  "date": "2025-12-18",
+  "source": "deepseek",
+  "timestamp": "2025-12-18T15:59:53.874066"
+}

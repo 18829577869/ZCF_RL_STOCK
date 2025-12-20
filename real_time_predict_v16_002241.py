@@ -252,7 +252,7 @@ def get_stock_name(code):
     return stock_name_map.get(code, code)  # 如果找不到，返回代码本身
 
 def map_action_to_operation(action):
-    """将动作映射到具体操作"""
+    """将动作映射到具体操作（内部使用，不直接展示给用户）"""
     actions = {
         0: "卖出 100%",
         1: "卖出 50%",
@@ -263,6 +263,19 @@ def map_action_to_operation(action):
         6: "买入 100%"
     }
     return actions.get(action, "未知动作")
+
+def map_action_to_direction(action):
+    """将PPO动作映射为方向性描述（避免"买入100%"等歧义）"""
+    directions = {
+        0: "强烈看空",
+        1: "看空",
+        2: "轻微看空",
+        3: "中性",
+        4: "轻微看多",
+        5: "看多",
+        6: "强烈看多"
+    }
+    return directions.get(action, "未知")
 
 def fetch_akshare_5min(code_info, days=7):
     """使用 AkShare 获取5分钟K线数据"""
@@ -406,6 +419,243 @@ def log_trade_operation(stock_code, operation, current_price, shares_held,
         return True
     except:
         return False
+
+# ==================== V16预测准确率统计功能 ====================
+
+def get_prediction_log_file(stock_code):
+    """获取预测日志文件路径"""
+    return f"v12_prediction_log_{stock_code.replace('.', '_')}.json"
+
+def save_v12_prediction(date_str, transformer_prediction, current_price, stock_code):
+    """
+    保存V12 Transformer预测结果
+    
+    Args:
+        date_str: 日期字符串（YYYY-MM-DD）
+        transformer_prediction: Transformer预测价格
+        current_price: 当前价格
+        stock_code: 股票代码
+    """
+    try:
+        prediction_log_file = get_prediction_log_file(stock_code)
+        predictions = []
+        if os.path.exists(prediction_log_file):
+            with open(prediction_log_file, 'r', encoding='utf-8') as f:
+                predictions = json.load(f)
+        
+        # 检查是否已存在该日期的预测，如果存在则更新
+        found = False
+        for pred in predictions:
+            if pred.get('date') == date_str:
+                pred['predicted_price'] = transformer_prediction
+                pred['current_price'] = current_price
+                pred['timestamp'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                found = True
+                break
+        
+        if not found:
+            predictions.append({
+                'date': date_str,
+                'predicted_price': transformer_prediction,
+                'current_price': current_price,
+                'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+            })
+        
+        # 保存到文件
+        with open(prediction_log_file, 'w', encoding='utf-8') as f:
+            json.dump(predictions, f, indent=2, ensure_ascii=False)
+        
+        return True
+    except Exception as e:
+        print(f"   ⚠️  保存V12预测失败: {e}")
+        return False
+
+def get_actual_close_price(stock_code, date_str):
+    """
+    获取指定日期的实际收盘价
+    
+    Args:
+        stock_code: 股票代码
+        date_str: 日期字符串（YYYY-MM-DD）
+    
+    Returns:
+        float: 收盘价，如果获取失败返回None
+    """
+    try:
+        import baostock as bs
+        bs.login()
+        
+        # 转换股票代码格式
+        if stock_code.startswith('sh.'):
+            bs_code = f"sh.{stock_code.split('.')[1]}"
+        elif stock_code.startswith('sz.'):
+            bs_code = f"sz.{stock_code.split('.')[1]}"
+        else:
+            bs_code = stock_code
+        
+        # 查询指定日期的K线数据
+        rs = bs.query_history_k_data_plus(
+            bs_code,
+            "date,close",
+            start_date=date_str,
+            end_date=date_str,
+            frequency="d",
+            adjustflag="3"
+        )
+        
+        if rs.error_code == '0':
+            data_list = []
+            while rs.next():
+                data_list.append(rs.get_row_data())
+            
+            bs.logout()
+            
+            if len(data_list) > 0:
+                return float(data_list[0][1])  # 返回收盘价
+        
+        bs.logout()
+        return None
+    except Exception as e:
+        print(f"   ⚠️  获取实际收盘价失败: {e}")
+        return None
+
+def calculate_prediction_accuracy(stock_code):
+    """
+    计算V12预测准确率统计
+    
+    Args:
+        stock_code: 股票代码
+    
+    Returns:
+        dict: 统计结果
+    """
+    try:
+        prediction_log_file = get_prediction_log_file(stock_code)
+        if not os.path.exists(prediction_log_file):
+            return None
+        
+        with open(prediction_log_file, 'r', encoding='utf-8') as f:
+            predictions = json.load(f)
+        
+        if len(predictions) == 0:
+            return None
+        
+        # 按日期排序
+        predictions.sort(key=lambda x: x.get('date', ''))
+        
+        accuracy_stats = {
+            'total_predictions': 0,
+            'valid_comparisons': 0,
+            'total_error': 0.0,
+            'total_abs_error': 0.0,
+            'total_error_pct': 0.0,
+            'total_abs_error_pct': 0.0,
+            'details': []
+        }
+        
+        today = datetime.datetime.now().date()
+        
+        for i, pred in enumerate(predictions):
+            pred_date_str = pred.get('date')
+            if not pred_date_str:
+                continue
+            
+            try:
+                pred_date = datetime.datetime.strptime(pred_date_str, '%Y-%m-%d').date()
+            except:
+                continue
+            
+            # 只统计昨天的预测和今天的实际收盘价
+            if pred_date >= today:
+                continue  # 跳过今天及未来的预测
+            
+            predicted_price = pred.get('predicted_price')
+            if predicted_price is None or predicted_price <= 0:
+                continue
+            
+            accuracy_stats['total_predictions'] += 1
+            
+            # 获取预测日期后一天的实际收盘价
+            next_date = pred_date + datetime.timedelta(days=1)
+            
+            # 跳过周末
+            while next_date.weekday() >= 5:  # 5=Saturday, 6=Sunday
+                next_date += datetime.timedelta(days=1)
+            
+            # 如果下一天是今天或未来，跳过
+            if next_date >= today:
+                continue
+            
+            next_date_str = next_date.strftime('%Y-%m-%d')
+            actual_close = get_actual_close_price(stock_code, next_date_str)
+            
+            if actual_close is None or actual_close <= 0:
+                continue
+            
+            # 计算误差
+            error = predicted_price - actual_close
+            abs_error = abs(error)
+            error_pct = (error / actual_close * 100) if actual_close > 0 else 0
+            abs_error_pct = abs(error_pct)
+            
+            accuracy_stats['valid_comparisons'] += 1
+            accuracy_stats['total_error'] += error
+            accuracy_stats['total_abs_error'] += abs_error
+            accuracy_stats['total_error_pct'] += error_pct
+            accuracy_stats['total_abs_error_pct'] += abs_error_pct
+            
+            accuracy_stats['details'].append({
+                'prediction_date': pred_date_str,
+                'actual_date': next_date_str,
+                'predicted_price': predicted_price,
+                'actual_close': actual_close,
+                'error': error,
+                'abs_error': abs_error,
+                'error_pct': error_pct,
+                'abs_error_pct': abs_error_pct
+            })
+        
+        # 计算平均值
+        if accuracy_stats['valid_comparisons'] > 0:
+            accuracy_stats['avg_error'] = accuracy_stats['total_error'] / accuracy_stats['valid_comparisons']
+            accuracy_stats['avg_abs_error'] = accuracy_stats['total_abs_error'] / accuracy_stats['valid_comparisons']
+            accuracy_stats['avg_error_pct'] = accuracy_stats['total_error_pct'] / accuracy_stats['valid_comparisons']
+            accuracy_stats['avg_abs_error_pct'] = accuracy_stats['total_abs_error_pct'] / accuracy_stats['valid_comparisons']
+        else:
+            accuracy_stats['avg_error'] = 0.0
+            accuracy_stats['avg_abs_error'] = 0.0
+            accuracy_stats['avg_error_pct'] = 0.0
+            accuracy_stats['avg_abs_error_pct'] = 0.0
+        
+        return accuracy_stats
+    except Exception as e:
+        print(f"   ⚠️  计算预测准确率失败: {e}")
+        return None
+
+def display_prediction_accuracy(stock_code):
+    """显示V12预测准确率统计"""
+    try:
+        stats = calculate_prediction_accuracy(stock_code)
+        if stats is None or stats['valid_comparisons'] == 0:
+            print(f"\n   📊 V12预测准确率统计: 暂无有效数据")
+            return
+        
+        print(f"\n   📊 V12预测准确率统计:")
+        print(f"      ✅ 总预测次数: {stats['total_predictions']} 次")
+        print(f"      ✅ 有效对比次数: {stats['valid_comparisons']} 次")
+        print(f"      📈 平均误差: {stats['avg_error']:.2f} 元 ({stats['avg_error_pct']:+.2f}%)")
+        print(f"      📊 平均绝对误差: {stats['avg_abs_error']:.2f} 元 ({stats['avg_abs_error_pct']:.2f}%)")
+        
+        # 显示最近5次预测的详细情况
+        if len(stats['details']) > 0:
+            print(f"\n      📋 最近5次预测详情:")
+            recent_details = stats['details'][-5:]
+            for detail in recent_details:
+                print(f"         {detail['prediction_date']} 预测 {detail['predicted_price']:.2f}元 → "
+                      f"{detail['actual_date']} 实际 {detail['actual_close']:.2f}元 "
+                      f"(误差: {detail['error']:+.2f}元, {detail['error_pct']:+.2f}%)")
+    except Exception as e:
+        print(f"   ⚠️  显示预测准确率失败: {e}")
 
 # ==================== 配置参数 ====================
 
@@ -3787,6 +4037,9 @@ while True:
         print(f"📊 第 {iteration_count} 轮预测 [{stock_name}({STOCK_CODE})] - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
         print(f"{'='*70}")
         
+        # V16新增：显示V12预测准确率统计
+        display_prediction_accuracy(STOCK_CODE)
+        
         # 获取数据（V11改进：优先获取最新数据）
         df = None
         if multi_source_manager:
@@ -4059,7 +4312,7 @@ while True:
                     if ppo_action is not None:
                         ppo_operation = map_action_to_operation(ppo_action)
                         stock_name = get_stock_name(STOCK_CODE)
-                        print(f"   🎯 V7 PPO动作 [{stock_name}({STOCK_CODE})]: {ppo_operation} (动作={ppo_action}, 模型={current_model_name})")
+                        # 已移除PPO动作显示，避免"买入100%"等描述产生歧义，请参考下方的"V7建议价格和仓位"
                         
                         # V7预测：添加买入卖出建议价格和当前建议持有仓位
                         v7_suggestions = calculate_v7_price_suggestions(current_price, ppo_action, closes)
@@ -4114,7 +4367,7 @@ while True:
                             # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
                             if ppo_action is not None and ppo_action <= 2:
                                 print(f"\n   ⚠️  V7下跌预警提示:")
-                                print(f"      📉 PPO模型建议卖出操作（动作={ppo_action}），请注意风险")
+                                print(f"      📉 PPO模型信号: {map_action_to_direction(ppo_action)}，请注意风险")
                                 print(f"      💡 建议：如果预测下跌2%以上，可考虑开盘卖出，在最低点再买回")
                                 print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
                 except Exception as e:
@@ -4127,7 +4380,7 @@ while True:
                 ppo_action = int(action)
                 ppo_operation = map_action_to_operation(ppo_action)
                 stock_name = get_stock_name(STOCK_CODE)
-                print(f"   🎯 V7 PPO动作 [{stock_name}({STOCK_CODE})]: {ppo_operation} (动作={ppo_action})")
+                # 已移除PPO动作显示，避免"买入100%"等描述产生歧义，请参考下方的"V7建议价格和仓位"
                 
                 # V7预测：添加买入卖出建议价格和当前建议持有仓位
                 v7_suggestions = calculate_v7_price_suggestions(current_price, ppo_action, closes)
@@ -4182,7 +4435,7 @@ while True:
                     # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
                     if ppo_action is not None and ppo_action <= 2:
                         print(f"\n   ⚠️  V7下跌预警提示:")
-                        print(f"      📉 PPO模型建议卖出操作（动作={ppo_action}），请注意风险")
+                        print(f"      📉 PPO模型信号: {map_action_to_direction(ppo_action)}，请注意风险")
                         print(f"      💡 建议：如果预测下跌2%以上，可考虑开盘卖出，在最低点再买回")
                         print(f"      🔄 做空处理：建议进行做空操作以规避下跌风险")
             except Exception as e:
@@ -4383,6 +4636,10 @@ while True:
                             print(f"   🔮 V12 Transformer预测价格: {transformer_prediction:.2f} (当前价格: {current_price:.2f}, 差异: {price_diff:+.2f} ({price_diff_pct:+.2f}%))")
                             print(f"      📊 归一化范围: [{min_val:.2f}, {max_val:.2f}], 当前价格在范围中的位置: {price_position:.1f}%")
                             
+                            # V16新增：保存V12预测结果用于准确率统计
+                            current_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+                            save_v12_prediction(current_date_str, transformer_prediction, current_price, STOCK_CODE)
+                            
                             if transformer_prediction < current_price and abs(price_diff_pct) > 5:
                                 print(f"      💡 V12优化说明:")
                                 print(f"         1. ✅ 已增加训练轮数到{TRANSFORMER_EPOCHS}轮，提高模型准确性")
@@ -4396,6 +4653,10 @@ while True:
                             price_diff = transformer_prediction - current_price
                             price_diff_pct = (price_diff / current_price * 100) if current_price > 0 else 0
                             print(f"   🔮 V12 Transformer预测价格: {transformer_prediction:.2f} (当前价格: {current_price:.2f}, 差异: {price_diff:+.2f} ({price_diff_pct:+.2f}%))")
+                            
+                            # V16新增：保存V12预测结果用于准确率统计
+                            current_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+                            save_v12_prediction(current_date_str, transformer_prediction, current_price, STOCK_CODE)
             except Exception as e:
                 print(f"   ⚠️  Transformer预测失败: {e}")
                 import traceback
