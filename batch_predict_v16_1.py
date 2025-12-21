@@ -252,6 +252,9 @@ def get_stock_name(code):
         'sz.300274': '阳光电源',
         'sz.002266': '浙富控股',
         'sz.300153': '科泰电源',
+        'sz.002837': '英维克',
+        'sz.300499': '高澜股份',
+        'sz.002706': '良信股份',
         'sh.601399': '国机重装',
         'sz.301005': '超捷股份',
     }
@@ -440,26 +443,36 @@ def get_batch_predict_log_file():
 
 # ==================== V16新增：纳指数据获取和指标计算 ====================
 
-# 纳指数据缓存（只获取一次）
-_nasdaq_metrics_cache = None
+# 指数数据缓存（只获取一次，包含纳斯达克、道琼斯、富时A50）
+_index_metrics_cache = None
 
-def get_nasdaq_metrics_once():
+def get_index_metrics_once():
     """
-    获取纳斯达克指数涨跌幅（只获取一次）
-    直接调用test_nasdaq_change.py中的get_nasdaq_change函数，确保使用相同的环境
+    获取全球主要指数涨跌幅（只获取一次）
+    包括：纳斯达克、道琼斯、富时A50期指连续
+    直接调用test_nasdaq_change.py中的get_index_data函数，确保使用相同的环境
     
     Returns:
-        dict: 包含纳指信息的字典，如果失败返回None
+        dict: 包含所有指数信息的字典，格式为：
+        {
+            'nasdaq': {...},  # 纳斯达克
+            'dow': {...},     # 道琼斯
+            'a50': {...},     # 富时A50
+            'update_time': '...'
+        }
+        如果失败返回None
     """
-    global _nasdaq_metrics_cache
+    global _index_metrics_cache
     
     # 如果已经获取过，直接返回缓存
-    if _nasdaq_metrics_cache is not None:
-        return _nasdaq_metrics_cache
+    if _index_metrics_cache is not None:
+        return _index_metrics_cache
     
     # 方法1: 直接导入并调用test_nasdaq_change.py中的函数（最可靠）
     # 使用上下文管理器临时重定向stdout和stderr，避免print输出干扰批量预测
     import sys
+    import json
+    import os
     from io import StringIO
     try:
         # 临时重定向stdout和stderr，捕获所有输出
@@ -469,22 +482,32 @@ def get_nasdaq_metrics_once():
         sys.stderr = StringIO()
         try:
             import test_nasdaq_change
-            result = test_nasdaq_change.get_nasdaq_change()
+            result = test_nasdaq_change.get_index_data()
         finally:
             # 恢复stdout和stderr
             sys.stdout = old_stdout
             sys.stderr = old_stderr
         
         if result and isinstance(result, dict):
-            # 转换格式以匹配批量预测需要的格式
-            _nasdaq_metrics_cache = {
-                'index_name': result.get('index_name', '纳斯达克相关标的'),
-                'change_pct': result.get('change_pct', 'N/A'),
-                'source': result.get('source', 'unknown')
-            }
-            return _nasdaq_metrics_cache
+            # 直接返回完整结果（包含nasdaq、dow、a50三个指数）
+            _index_metrics_cache = result
+            return _index_metrics_cache
     except Exception:
-        # 如果导入失败，使用内置方法
+        # 如果导入失败，尝试从文件读取
+        pass
+    
+    # 方法1.5: 如果直接获取失败，尝试从文件读取（test_nasdaq_change.py保存的数据）
+    try:
+        script_dir = os.path.dirname(os.path.abspath(__file__))
+        file_path = os.path.join(script_dir, 'index_data.json')
+        if os.path.exists(file_path):
+            with open(file_path, 'r', encoding='utf-8') as f:
+                file_data = json.load(f)
+                if file_data and isinstance(file_data, dict):
+                    _index_metrics_cache = file_data
+                    return _index_metrics_cache
+    except Exception:
+        # 文件读取失败，继续尝试其他方法
         pass
     
     # 方法2: 如果导入失败，直接使用akshare（与test_nasdaq_change.py完全一致）
@@ -524,16 +547,22 @@ def get_nasdaq_metrics_once():
                 if change_pct is None:
                     change_pct = 'N/A'
                 
-                _nasdaq_metrics_cache = {
-                    'index_name': latest.get('名称', '纳斯达克相关标的'),
-                    'change_pct': change_pct,
-                    'source': 'akshare_us_spot',
-                    'note': '这是ETF或相关标的，非指数本身'
+                # 构建返回格式（兼容旧格式，同时支持新格式）
+                _index_metrics_cache = {
+                    'nasdaq': {
+                        'index_name': latest.get('名称', '纳斯达克相关标的'),
+                        'change_pct': change_pct,
+                        'source': 'akshare_us_spot',
+                        'note': '这是ETF或相关标的，非指数本身'
+                    },
+                    'dow': None,  # 道琼斯数据需要单独获取
+                    'a50': None,  # 富时A50数据需要单独获取
+                    'update_time': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
                 }
                 # 恢复代理设置
                 for var, value in saved_proxies.items():
                     os.environ[var] = value
-                return _nasdaq_metrics_cache
+                return _index_metrics_cache
     except ImportError:
         # akshare未安装
         pass
@@ -556,12 +585,17 @@ def get_nasdaq_metrics_once():
             prev = hist.iloc[-2] if len(hist) > 1 else latest
             change_pct = ((latest['Close'] - prev['Close']) / prev['Close']) * 100
             
-            _nasdaq_metrics_cache = {
-                'index_name': '纳斯达克综合指数 (IXIC)',
-                'change_pct': round(change_pct, 2),
-                'source': 'yfinance'
+            _index_metrics_cache = {
+                'nasdaq': {
+                    'index_name': '纳斯达克综合指数 (IXIC)',
+                    'change_pct': round(change_pct, 2),
+                    'source': 'yfinance'
+                },
+                'dow': None,
+                'a50': None,
+                'update_time': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             }
-            return _nasdaq_metrics_cache
+            return _index_metrics_cache
     except ImportError:
         pass
     except Exception as e:
@@ -569,7 +603,7 @@ def get_nasdaq_metrics_once():
         pass
     
     # 所有方法都失败
-    _nasdaq_metrics_cache = None
+    _index_metrics_cache = None
     return None
 
 # 股票夏普比率和回撤数据配置（用户提供的回测数据）
@@ -1098,22 +1132,22 @@ MODEL_PATH = "ppo_stock_v7_002025.zip"  # V12使用通用PPO模型，也可以�
 
 # 批量预测：股票列表（仅包含有专用模型的股票）
 STOCK_LIST = [
-    {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_603267.zip'},
+    {'code': 'sz.002837', 'name': '英维克', 'model': 'ppo_stock_v7_002837.zip'},  # 🏆 双料冠军
+    {'code': 'sz.002851', 'name': '麦格米特', 'model': 'ppo_stock_v7_002851.zip'},  # 收益顶尖
+    {'code': 'sh.600730', 'name': '中国高科', 'model': 'ppo_stock_v7_600730.zip'},  # 最大黑马
+    {'code': 'sz.002241', 'name': '歌尔股份', 'model': 'ppo_stock_v7_002241.zip'},  # 通用模型典范
+    {'code': 'sz.002475', 'name': '立讯精密', 'model': 'ppo_stock_v7_002475.zip'},  # 极品策略
+    {'code': 'sz.300499', 'name': '高澜股份', 'model': 'ppo_stock_v7_300499.zip'},  # 零回撤之王
+    {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip'},  # 稳健优秀
+    {'code': 'sz.002706', 'name': '良信股份', 'model': 'ppo_stock_v7_002837.zip'},  # 模型切换成功（使用英维克模型）
+    {'code': 'sz.301005', 'name': '超捷股份', 'model': 'ppo_stock_v7_301005.zip'},  # 回撤风险高
+    {'code': 'sh.601399', 'name': '国机重装', 'model': 'ppo_stock_v7_601399.zip'},  # 零回撤稳健策略
+    {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300153.zip'},  # 回撤较大
+    {'code': 'sz.300274', 'name': '阳光电源', 'model': 'ppo_stock_v7_300274.zip'},  # 风控好
+    {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_603267.zip'},  # ⚠️ 高危
     {'code': 'sh.603698', 'name': '航天工程', 'model': 'ppo_stock_v7_603698.zip'},
-    {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7_002025.zip'},
-    {'code': 'sz.002241', 'name': '歌尔股份', 'model': 'ppo_stock_v7_002241.zip'},
-    {'code': 'sz.002475', 'name': '立讯精密', 'model': 'ppo_stock_v7_002475.zip'},
+    {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7_002025.zip'},  # ⚠️ 表现最差
     {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip'},
-    {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip'},
-    {'code': 'sz.301017', 'name': '漱玉平民', 'model': 'ppo_stock_v7_301017.zip'},
-    {'code': 'sz.300749', 'name': '顶固集创', 'model': 'ppo_stock_v7_300749.zip'},
-    {'code': 'sh.600730', 'name': '中国高科', 'model': 'ppo_stock_v7_600730.zip'},
-    {'code': 'sz.002851', 'name': '麦格米特', 'model': 'ppo_stock_v7_002851.zip'},
-    {'code': 'sz.300274', 'name': '阳光电源', 'model': 'ppo_stock_v7_300274.zip'},
-    {'code': 'sz.002266', 'name': '浙富控股', 'model': 'ppo_stock_v7_002266.zip'},
-    {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300153.zip'},
-    {'code': 'sh.601399', 'name': '国机重装', 'model': 'ppo_stock_v7_601399.zip'},
-    {'code': 'sz.301005', 'name': '超捷股份', 'model': 'ppo_stock_v7_301005.zip'},
 ]
 
 # 当前处理的股票代码（会在循环中动态设置）
@@ -1238,6 +1272,16 @@ try:
 except ImportError:
     STOCKAPI_AVAILABLE = False
 CANDIDATE_MODELS = [  # 候选模型列表（包含所有股票的专用模型）
+    {
+        'name': '002837模型',
+        'paths': ['ppo_stock_v7_002837.zip', 'models_v7_002837/best/best_model.zip'],
+        'description': '英维克002837专用模型 - 🏆 双料冠军'
+    },
+    {
+        'name': '300499模型',
+        'paths': ['ppo_stock_v7_300499.zip', 'models_v7_300499/best/best_model.zip'],
+        'description': '高澜股份300499专用模型 - 零回撤之王'
+    },
     {
         'name': '603267模型',
         'paths': ['ppo_stock_v7_603267.zip', 'models_v7_603267/best/best_model.zip'],
@@ -4311,27 +4355,65 @@ print("⚠️  重要提示: 这是 V16 批量预测版本，每个股票只运�
 if ENABLE_AUTO_MODEL_SELECTION:
     print(f"   📊 已启用自动模型选择，候选模型数量: {len(candidate_ppo_models)}")
 
-# V16新增：在批量预测开始时获取并显示一次纳指数据
+# V16新增：在批量预测开始时获取并显示一次全球主要指数数据
 try:
-    # 尝试获取纳指数据（使用与test_nasdaq_change.py相同的方法）
-    nasdaq_info = get_nasdaq_metrics_once()
-    if nasdaq_info:
-        change_pct = nasdaq_info.get('change_pct', 'N/A')
-        index_name = nasdaq_info.get('index_name', '纳指')
-        # 处理涨跌幅显示（支持字符串和数字格式）
-        if isinstance(change_pct, (int, float)):
-            print(f"\n📈 纳指最新涨跌幅: {change_pct:+.2f}% ({index_name})")
-        elif isinstance(change_pct, str) and change_pct != 'N/A':
-            # 如果是字符串格式（可能带%），直接显示
-            print(f"\n📈 纳指最新涨跌幅: {change_pct} ({index_name})")
+    # 尝试获取指数数据（使用与test_nasdaq_change.py相同的方法）
+    index_data = get_index_metrics_once()
+    if index_data:
+        print(f"\n📊 全球主要指数涨跌幅:")
+        
+        # 显示纳斯达克指数
+        nasdaq = index_data.get('nasdaq')
+        if nasdaq:
+            change_pct = nasdaq.get('change_pct', 'N/A')
+            index_name = nasdaq.get('index_name', '纳斯达克')
+            if isinstance(change_pct, (int, float)):
+                print(f"   📈 纳斯达克: {change_pct:+.2f}% ({index_name})")
+            elif isinstance(change_pct, str) and change_pct != 'N/A':
+                print(f"   📈 纳斯达克: {change_pct} ({index_name})")
+            else:
+                print(f"   📈 纳斯达克: {change_pct} ({index_name})")
         else:
-            print(f"\n📈 纳指数据: {change_pct} ({index_name})")
+            print(f"   ⚠️  纳斯达克: 数据获取失败")
+        
+        # 显示道琼斯指数
+        dow = index_data.get('dow')
+        if dow:
+            change_pct = dow.get('change_pct', 'N/A')
+            index_name = dow.get('index_name', '道琼斯')
+            if isinstance(change_pct, (int, float)):
+                print(f"   📈 道琼斯: {change_pct:+.2f}% ({index_name})")
+            elif isinstance(change_pct, str) and change_pct != 'N/A':
+                print(f"   📈 道琼斯: {change_pct} ({index_name})")
+            else:
+                print(f"   📈 道琼斯: {change_pct} ({index_name})")
+        else:
+            print(f"   ⚠️  道琼斯: 数据获取失败")
+        
+        # 显示富时A50期指连续
+        a50 = index_data.get('a50')
+        if a50:
+            change_pct = a50.get('change_pct', 'N/A')
+            index_name = a50.get('index_name', '富时A50')
+            if isinstance(change_pct, (int, float)):
+                print(f"   📈 富时A50: {change_pct:+.2f}% ({index_name})")
+            elif isinstance(change_pct, str) and change_pct != 'N/A':
+                print(f"   📈 富时A50: {change_pct} ({index_name})")
+            else:
+                print(f"   📈 富时A50: {change_pct} ({index_name})")
+        else:
+            print(f"   ⚠️  富时A50: 数据获取失败")
+        
+        # 如果是从文件读取的，显示更新时间
+        update_time = index_data.get('update_time', '')
+        if update_time:
+            print(f"   📝 数据更新时间: {update_time}")
     else:
         # 如果获取失败，提示但不影响批量预测
-        print(f"\n⚠️  无法获取纳指数据（将跳过纳指对比，不影响股票预测）")
+        print(f"\n⚠️  无法获取指数数据（将跳过指数对比，不影响股票预测）")
 except Exception as e:
     # 捕获异常，避免影响批量预测
-    print(f"\n⚠️  获取纳指数据时发生错误（将跳过纳指对比，不影响股票预测）")
+    print(f"\n⚠️  获取指数数据时发生错误（将跳过指数对比，不影响股票预测）")
 
 print("=" * 70 + "\n")
 
@@ -4646,7 +4728,7 @@ try:
                 # 备选方案：从数据源获取（可能是历史数据）
                 data_source_price = closes[-1]
                 
-                # 确定最终使用的价格：优先级 实时行情(今天) > 持仓编辑器手动价格 > 实时行情(昨天) > 数据源价格
+                # 确定最终使用的价格：优先级 实时行情 > 持仓编辑器手动价格 > 数据源价格
                 # 先读取持仓编辑器中的价格，用于比较
                 manual_price = None
                 manual_price_time = None
@@ -4678,36 +4760,31 @@ try:
                         except:
                             pass
                 
-                # 确定最终使用的价格
-                if realtime_price and realtime_price > 0 and realtime_price_is_today:
-                    # 实时价格是今天的，优先使用
+                # 确定最终使用的价格：优先使用实时价格（无论是否今天）
+                if realtime_price and realtime_price > 0:
+                    # 实时价格存在，优先使用（无论是否今天）
                     current_price = realtime_price
-                    price_source = "实时行情"
+                    if realtime_price_is_today:
+                        price_source = "实时行情"
+                    else:
+                        price_source = "实时行情(可能非最新)"
                     # 同步更新到持仓状态文件
                     try:
                         state = load_portfolio_state()
                         if state and state.get('stock_code') == STOCK_CODE:
                             state['last_price'] = realtime_price
                             state['price_source'] = '实时行情'
-                        state['price_update_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
-                        with open(PORTFOLIO_STATE_FILE, 'w', encoding='utf-8') as f:
-                            json.dump(state, f, indent=2, ensure_ascii=False)
-                        print(f"   ✅ 已同步实时价格到持仓编辑器: {realtime_price:.2f}")
+                            state['price_update_time'] = datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+                            with open(PORTFOLIO_STATE_FILE, 'w', encoding='utf-8') as f:
+                                json.dump(state, f, indent=2, ensure_ascii=False)
+                            print(f"   ✅ 已同步实时价格到持仓编辑器: {realtime_price:.2f}")
                     except Exception as e:
                         print(f"   ⚠️  同步价格到持仓编辑器失败: {e}")
                 elif manual_price and manual_price > 0:
-                    # 如果实时价格是旧数据或没有，优先使用持仓编辑器中的手动价格
+                    # 如果实时价格不存在，使用持仓编辑器中的手动价格
                     current_price = manual_price
                     price_source = "持仓编辑器(手动输入)"
                     print(f"   ✅ 使用持仓编辑器中的手动价格: {current_price:.2f}")
-                # 如果实时价格是旧数据，不覆盖持仓编辑器中的新价格
-                if realtime_price and realtime_price > 0 and not realtime_price_is_today:
-                    print(f"   📝 检测到实时价格({realtime_price:.2f})是旧数据，保持持仓编辑器中的价格({current_price:.2f})")
-                elif realtime_price and realtime_price > 0:
-                    # 实时价格存在但是旧数据，且没有手动价格，使用实时价格
-                    current_price = realtime_price
-                    price_source = "实时行情(可能非最新)"
-                    print(f"   ⚠️  使用实时价格(可能非最新): {current_price:.2f}")
                 else:
                     current_price = data_source_price
                     price_source = "数据源(可能非最新)"
@@ -5303,17 +5380,19 @@ try:
                 
                 # ========== V13: 止损止盈风险控制 ==========
                 stop_loss_info = None
+                # 初始化成本价变量（确保在所有情况下都被定义）
+                current_cost_price = None
+                
                 if ENABLE_STOP_LOSS_TAKE_PROFIT and shares_held > 0:
                     # 获取成本价
                     portfolio_state_for_stop = load_portfolio_state()
-                    current_cost_price = None
                     if portfolio_state_for_stop and portfolio_state_for_stop.get('stock_code') == STOCK_CODE:
                         cost_price_val = portfolio_state_for_stop.get('cost_price')
                         actual_buy_price_val = portfolio_state_for_stop.get('actual_buy_price')
                         if cost_price_val and isinstance(cost_price_val, (int, float)) and cost_price_val > 0:
                             current_cost_price = float(cost_price_val)
-                    elif actual_buy_price_val and isinstance(actual_buy_price_val, (int, float)) and actual_buy_price_val > 0:
-                        current_cost_price = float(actual_buy_price_val)
+                        elif actual_buy_price_val and isinstance(actual_buy_price_val, (int, float)) and actual_buy_price_val > 0:
+                            current_cost_price = float(actual_buy_price_val)
                 
                 if current_cost_price and current_cost_price > 0:
                     # 应用止损止盈逻辑
@@ -6162,7 +6241,7 @@ try:
                 
                 # ========== V16新增：显示股票的夏普收益率和回撤 ==========
                 stock_metrics = None
-                nasdaq_info = _nasdaq_metrics_cache  # 使用已缓存的纳指数据
+                index_data = _index_metrics_cache  # 使用已缓存的指数数据
                 
                 try:
                     # 从配置中获取股票的收益率和回撤数据（用户提供的回测数据）
@@ -6177,10 +6256,34 @@ try:
                         if stock_metrics['sharpe_ratio'] is not None:
                             print(f"      夏普比率: {stock_metrics['sharpe_ratio']:.2f}")
                         
-                        # 如果有纳指数据，进行对比
-                        if nasdaq_info and nasdaq_info.get('change_pct') and isinstance(nasdaq_info.get('change_pct'), (int, float)):
-                            nasdaq_change = float(nasdaq_info.get('change_pct'))
-                            print(f"      纳指涨跌幅: {nasdaq_change:+.2f}%")
+                        # 如果有指数数据，进行对比
+                        if index_data:
+                            # 显示纳斯达克
+                            nasdaq = index_data.get('nasdaq')
+                            if nasdaq and nasdaq.get('change_pct'):
+                                change_pct = nasdaq.get('change_pct')
+                                if isinstance(change_pct, (int, float)):
+                                    print(f"      纳斯达克涨跌幅: {change_pct:+.2f}%")
+                                elif isinstance(change_pct, str) and change_pct != 'N/A':
+                                    print(f"      纳斯达克涨跌幅: {change_pct}")
+                            
+                            # 显示道琼斯
+                            dow = index_data.get('dow')
+                            if dow and dow.get('change_pct'):
+                                change_pct = dow.get('change_pct')
+                                if isinstance(change_pct, (int, float)):
+                                    print(f"      道琼斯涨跌幅: {change_pct:+.2f}%")
+                                elif isinstance(change_pct, str) and change_pct != 'N/A':
+                                    print(f"      道琼斯涨跌幅: {change_pct}")
+                            
+                            # 显示富时A50
+                            a50 = index_data.get('a50')
+                            if a50 and a50.get('change_pct'):
+                                change_pct = a50.get('change_pct')
+                                if isinstance(change_pct, (int, float)):
+                                    print(f"      富时A50涨跌幅: {change_pct:+.2f}%")
+                                elif isinstance(change_pct, str) and change_pct != 'N/A':
+                                    print(f"      富时A50涨跌幅: {change_pct}")
                     else:
                         print(f"\n   ⚠️  {stock_name}({STOCK_CODE})暂无回测数据")
                     
@@ -6222,9 +6325,13 @@ try:
                     'regime': regime_val if regime_val else None,
                     'trend_score': float(trend_score_val) if trend_score_val is not None else None,
                     'range_score': float(range_score_val) if range_score_val is not None else None,
-                    # V16新增：纳指和股票的收益率和回撤
-                    'nasdaq_change_pct': float(nasdaq_info.get('change_pct')) if nasdaq_info and nasdaq_info.get('change_pct') and isinstance(nasdaq_info.get('change_pct'), (int, float)) else None,
-                    'nasdaq_index_name': nasdaq_info.get('index_name') if nasdaq_info else None,
+                    # V16新增：全球主要指数和股票的收益率和回撤
+                    'nasdaq_change_pct': float(nasdaq.get('change_pct')) if index_data and (nasdaq := index_data.get('nasdaq')) and nasdaq and nasdaq.get('change_pct') and isinstance(nasdaq.get('change_pct'), (int, float)) else None,
+                    'nasdaq_index_name': nasdaq.get('index_name') if index_data and (nasdaq := index_data.get('nasdaq')) and nasdaq else None,
+                    'dow_change_pct': float(dow.get('change_pct')) if index_data and (dow := index_data.get('dow')) and dow and dow.get('change_pct') and isinstance(dow.get('change_pct'), (int, float)) else None,
+                    'dow_index_name': dow.get('index_name') if index_data and (dow := index_data.get('dow')) and dow else None,
+                    'a50_change_pct': float(a50.get('change_pct')) if index_data and (a50 := index_data.get('a50')) and a50 and a50.get('change_pct') and isinstance(a50.get('change_pct'), (int, float)) else None,
+                    'a50_index_name': a50.get('index_name') if index_data and (a50 := index_data.get('a50')) and a50 else None,
                     'stock_total_return': float(stock_metrics['total_return']) if stock_metrics and stock_metrics.get('total_return') is not None else None,
                     'stock_max_drawdown': float(stock_metrics['max_drawdown']) if stock_metrics and stock_metrics.get('max_drawdown') is not None else None,
                     'stock_sharpe_ratio': float(stock_metrics['sharpe_ratio']) if stock_metrics and stock_metrics.get('sharpe_ratio') is not None else None,
@@ -6240,14 +6347,23 @@ try:
             
             print(f"{'='*70}\n")
             
-            # 批量预测：保存该股票的完整输出到日志文件
+            # 批量预测：保存该股票的完整输出到日志文件（无论是否成功）
             try:
                 captured_output = output_capture.get_output()
                 if captured_output:
                     append_to_log_file(captured_output, log_file)
                     append_to_log_file("", log_file)  # 添加空行分隔
+                else:
+                    # 即使输出为空，也记录一个标记，确保日志连续性
+                    append_to_log_file(f"⚠️  [{stock_name}({STOCK_CODE})] 预测输出为空或未捕获", log_file)
+                    append_to_log_file("", log_file)
             except Exception as e:
                 print(f"   ⚠️  保存日志输出失败: {e}")
+                # 即使保存失败，也尝试记录错误信息
+                try:
+                    append_to_log_file(f"⚠️  保存日志输出失败: {e}", log_file)
+                except:
+                    pass
             
             # 批量预测：每个股票只运行一次，不等待，直接继续下一个股票
             
@@ -6255,6 +6371,15 @@ try:
                 print(f"\n❌ [{stock_name}({STOCK_CODE})] 预测过程中发生错误: {e}")
                 import traceback
                 traceback.print_exc()
+                # 即使出现异常，也尝试保存已捕获的输出
+                try:
+                    captured_output = output_capture.get_output()
+                    if captured_output:
+                        append_to_log_file(captured_output, log_file)
+                        append_to_log_file(f"❌ [{stock_name}({STOCK_CODE})] 预测过程中发生错误: {e}", log_file)
+                        append_to_log_file("", log_file)
+                except:
+                    pass
                 # 继续处理下一个股票，不中断整个批量预测
                 continue
 except KeyboardInterrupt:
