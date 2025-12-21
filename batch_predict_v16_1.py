@@ -3152,21 +3152,22 @@ def calculate_v7_price_suggestions(current_price, ppo_action, historical_prices=
             volatility_pct = 2.0
     
     # 根据PPO动作确定价格区间和仓位建议
-    price_interval_pct = max(2.0, min(8.0, volatility_pct * 1.5))
+    price_interval_pct = max(3.0, min(10.0, volatility_pct * 1.5))  # 增加最小区间到3%，最大到10%
     price_interval_size = current_price * price_interval_pct / 100
     
     # 根据PPO动作确定价格区间的中心偏移
+    # 调整策略：使当前价格更可能落在区间的中下部，这样仓位会更合理
     center_offset = 0.0
     if ppo_action == 6:  # 买入 100%
-        center_offset = -price_interval_size * 0.2  # 向下偏移，使当前价格更容易触发买入
+        center_offset = -price_interval_size * 0.3  # 向下偏移更多，使当前价格更容易触发买入
     elif ppo_action == 5:  # 买入 50%
-        center_offset = -price_interval_size * 0.1
+        center_offset = -price_interval_size * 0.2
     elif ppo_action == 4:  # 买入 25%
-        center_offset = -price_interval_size * 0.05
+        center_offset = -price_interval_size * 0.1
     elif ppo_action == 3:  # 持有
-        center_offset = 0.0
+        center_offset = -price_interval_size * 0.1  # 持有也向下偏移，使当前价格在区间中下部
     elif ppo_action == 2:  # 卖出 25%
-        center_offset = price_interval_size * 0.05
+        center_offset = price_interval_size * 0.0  # 不偏移
     elif ppo_action == 1:  # 卖出 50%
         center_offset = price_interval_size * 0.1
     elif ppo_action == 0:  # 卖出 100%
@@ -4355,65 +4356,14 @@ print("⚠️  重要提示: 这是 V16 批量预测版本，每个股票只运�
 if ENABLE_AUTO_MODEL_SELECTION:
     print(f"   📊 已启用自动模型选择，候选模型数量: {len(candidate_ppo_models)}")
 
-# V16新增：在批量预测开始时获取并显示一次全球主要指数数据
+# V16新增：在批量预测开始时获取指数数据（不显示，仅用于后台计算）
 try:
     # 尝试获取指数数据（使用与test_nasdaq_change.py相同的方法）
+    # 注意：指数数据不再显示，但会在后台获取用于后续计算
     index_data = get_index_metrics_once()
-    if index_data:
-        print(f"\n📊 全球主要指数涨跌幅:")
-        
-        # 显示纳斯达克指数
-        nasdaq = index_data.get('nasdaq')
-        if nasdaq:
-            change_pct = nasdaq.get('change_pct', 'N/A')
-            index_name = nasdaq.get('index_name', '纳斯达克')
-            if isinstance(change_pct, (int, float)):
-                print(f"   📈 纳斯达克: {change_pct:+.2f}% ({index_name})")
-            elif isinstance(change_pct, str) and change_pct != 'N/A':
-                print(f"   📈 纳斯达克: {change_pct} ({index_name})")
-            else:
-                print(f"   📈 纳斯达克: {change_pct} ({index_name})")
-        else:
-            print(f"   ⚠️  纳斯达克: 数据获取失败")
-        
-        # 显示道琼斯指数
-        dow = index_data.get('dow')
-        if dow:
-            change_pct = dow.get('change_pct', 'N/A')
-            index_name = dow.get('index_name', '道琼斯')
-            if isinstance(change_pct, (int, float)):
-                print(f"   📈 道琼斯: {change_pct:+.2f}% ({index_name})")
-            elif isinstance(change_pct, str) and change_pct != 'N/A':
-                print(f"   📈 道琼斯: {change_pct} ({index_name})")
-            else:
-                print(f"   📈 道琼斯: {change_pct} ({index_name})")
-        else:
-            print(f"   ⚠️  道琼斯: 数据获取失败")
-        
-        # 显示富时A50期指连续
-        a50 = index_data.get('a50')
-        if a50:
-            change_pct = a50.get('change_pct', 'N/A')
-            index_name = a50.get('index_name', '富时A50')
-            if isinstance(change_pct, (int, float)):
-                print(f"   📈 富时A50: {change_pct:+.2f}% ({index_name})")
-            elif isinstance(change_pct, str) and change_pct != 'N/A':
-                print(f"   📈 富时A50: {change_pct} ({index_name})")
-            else:
-                print(f"   📈 富时A50: {change_pct} ({index_name})")
-        else:
-            print(f"   ⚠️  富时A50: 数据获取失败")
-        
-        # 如果是从文件读取的，显示更新时间
-        update_time = index_data.get('update_time', '')
-        if update_time:
-            print(f"   📝 数据更新时间: {update_time}")
-    else:
-        # 如果获取失败，提示但不影响批量预测
-        print(f"\n⚠️  无法获取指数数据（将跳过指数对比，不影响股票预测）")
 except Exception as e:
     # 捕获异常，避免影响批量预测
-    print(f"\n⚠️  获取指数数据时发生错误（将跳过指数对比，不影响股票预测）")
+    pass
 
 print("=" * 70 + "\n")
 
@@ -4959,10 +4909,10 @@ try:
                             print(f"      📊 当前价格对应的合理仓位: {current_pos_pct:.0f}%")
                             print(f"      📝 仓位描述: {v7_suggestions['position_description']}")
                             # 增加更详细的人性化说明
-                        if v7_suggestions.get('detailed_position_description'):
-                            print(f"      📖 详细说明: {v7_suggestions['detailed_position_description']}")
-                        
-                        print(f"      📈 价格区间: {v7_suggestions['price_interval_pct']:.2f}% (基于波动率{v7_suggestions['volatility_pct']:.2f}%)")
+                            if v7_suggestions.get('detailed_position_description'):
+                                print(f"      📖 详细说明: {v7_suggestions['detailed_position_description']}")
+                            
+                            print(f"      📈 价格区间: {v7_suggestions['price_interval_pct']:.2f}% (基于波动率{v7_suggestions['volatility_pct']:.2f}%)")
                         
                         # V7下跌预测检测：当PPO动作是卖出（0-2）时，提示做空处理
                         if ppo_action is not None and ppo_action <= 2:
@@ -6256,34 +6206,7 @@ try:
                         if stock_metrics['sharpe_ratio'] is not None:
                             print(f"      夏普比率: {stock_metrics['sharpe_ratio']:.2f}")
                         
-                        # 如果有指数数据，进行对比
-                        if index_data:
-                            # 显示纳斯达克
-                            nasdaq = index_data.get('nasdaq')
-                            if nasdaq and nasdaq.get('change_pct'):
-                                change_pct = nasdaq.get('change_pct')
-                                if isinstance(change_pct, (int, float)):
-                                    print(f"      纳斯达克涨跌幅: {change_pct:+.2f}%")
-                                elif isinstance(change_pct, str) and change_pct != 'N/A':
-                                    print(f"      纳斯达克涨跌幅: {change_pct}")
-                            
-                            # 显示道琼斯
-                            dow = index_data.get('dow')
-                            if dow and dow.get('change_pct'):
-                                change_pct = dow.get('change_pct')
-                                if isinstance(change_pct, (int, float)):
-                                    print(f"      道琼斯涨跌幅: {change_pct:+.2f}%")
-                                elif isinstance(change_pct, str) and change_pct != 'N/A':
-                                    print(f"      道琼斯涨跌幅: {change_pct}")
-                            
-                            # 显示富时A50
-                            a50 = index_data.get('a50')
-                            if a50 and a50.get('change_pct'):
-                                change_pct = a50.get('change_pct')
-                                if isinstance(change_pct, (int, float)):
-                                    print(f"      富时A50涨跌幅: {change_pct:+.2f}%")
-                                elif isinstance(change_pct, str) and change_pct != 'N/A':
-                                    print(f"      富时A50涨跌幅: {change_pct}")
+                        # 指数数据不再显示（已移除纳指、道琼斯、富时A50的显示）
                     else:
                         print(f"\n   ⚠️  {stock_name}({STOCK_CODE})暂无回测数据")
                     
