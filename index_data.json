@@ -1,33 +1,6 @@
 {
-  "nasdaq": {
-    "index_name": "ProShares Ultra QQQ Top 30",
-    "latest_price": 43.409,
-    "change_pct": 2.68,
-    "change": 1.133,
-    "date": "2025-12-21",
-    "source": "akshare_us_spot",
-    "note": "这是ETF或相关标的，非指数本身，涨跌幅为当日数据",
-    "update_time": "2025-12-21 15:27:19"
-  },
-  "dow": {
-    "index_name": "Cardio Diagnostics Holdings Inc",
-    "latest_price": 3.23,
-    "change_pct": 14.54,
-    "change": 0.41,
-    "date": "2025-12-21",
-    "source": "akshare_us_spot",
-    "note": "这是ETF或相关标的，非指数本身，涨跌幅为当日数据",
-    "update_time": "2025-12-21 15:28:28"
-  },
-  "a50": {
-    "index_name": "21Shares FTSE Crypto 10 ex-BTC ",
-    "latest_price": 21.333,
-    "change_pct": 7.26,
-    "change": 1.444,
-    "date": "2025-12-21",
-    "source": "akshare_us_spot",
-    "note": "这是ETF或相关标的，非指数本身，涨跌幅为当日数据",
-    "update_time": "2025-12-21 15:29:28"
-  },
-  "update_time": "2025-12-21 15:26:10"
+  "nasdaq": null,
+  "dow": null,
+  "a50": null,
+  "update_time": "2025-12-23 18:04:08"
 }

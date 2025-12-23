@@ -12,7 +12,8 @@ def main():
     scripts = sorted(
         [
             "real_time_predict_v16_000625.py",
-            "real_time_predict_v16_301005.py",
+            "real_time_predict_v16_002025.py",
+            "real_time_predict_v16_002241.py",
             "real_time_predict_v16_002266.py",
             "real_time_predict_v16_002475.py",
             "real_time_predict_v16_002706.py",
@@ -23,13 +24,15 @@ def main():
             "real_time_predict_v16_300499.py",
             "real_time_predict_v16_300726.py",
             "real_time_predict_v16_300762.py",
+            "real_time_predict_v16_301005.py",
             "real_time_predict_v16_600730.py",
             "real_time_predict_v16_600733.py",
             "real_time_predict_v16_601399.py",
             "real_time_predict_v16_603267.py",
-            "real_time_predict_v16_002241.py",
-            "real_time_predict_v16_002025.py",
             "real_time_predict_v16_603698.py",
+            # 新增：道通科技688208（A股）和道通转债118013（可转债准实时）
+            "real_time_predict_v16_688208.py",
+            "real_time_predict_v16_118013.py",
         ]
     )
 

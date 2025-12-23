@@ -257,6 +257,11 @@ def get_stock_name(code):
         'sz.002706': '良信股份',
         'sh.601399': '国机重装',
         'sz.301005': '超捷股份',
+        'sh.688208': '道通科技',
+        'sh.118013': '道通转债',
+        'sz.002335': '科华数据',
+        'sz.002364': '中恒电气',
+        'sz.002518': '科士达',
     }
     return stock_name_map.get(code, code)  # 如果找不到，返回代码本身
 
@@ -286,15 +291,83 @@ def map_action_to_direction(action):
     }
     return directions.get(action, "未知")
 
+def fetch_bond_daily_quasi_realtime(stock_code, days=365):
+    """
+    使用 AkShare 获取可转债日线数据，作为「准实时」行情：
+    - 每次调用重新获取最近 N 天日线
+    - 返回的 DataFrame 至少包含: date, time, close, volume
+    专门用于道通转债 118013 等可转债品种。
+    """
+    try:
+        import akshare as ak
+        # 将 sh.118013 转成 akshare 可转债代码，如 sh118013
+        symbol = stock_code.replace('.', '')
+        df = ak.bond_zh_hs_daily(symbol=symbol)
+        if df is None or len(df) == 0:
+            return None
+
+        # 标准化列名
+        col_map = {
+            '日期': 'date',
+            '收盘': 'close',
+            '成交量': 'volume'
+        }
+        for old, new in col_map.items():
+            if old in df.columns:
+                df = df.rename(columns={old: new})
+
+        if 'date' not in df.columns or 'close' not in df.columns:
+            return None
+
+        df['date'] = pd.to_datetime(df['date'])
+        df = df.sort_values('date')
+
+        # 只保留最近 N 天
+        end_date = datetime.date.today()
+        start_date = end_date - datetime.timedelta(days=days)
+        df = df[(df['date'].dt.date >= start_date) & (df['date'].dt.date <= end_date)]
+        if len(df) == 0:
+            return None
+
+        # 构造 time 列（用收盘日期 + 固定时间表示）
+        df['time'] = df['date'].dt.strftime('%Y%m%d') + '150000'
+
+        # 确保 volume 存在
+        if 'volume' not in df.columns:
+            df['volume'] = 0.0
+
+        return df[['date', 'time', 'close', 'volume']]
+    except Exception:
+        return None
+
+
 def fetch_akshare_5min(code_info, days=7):
-    """使用 AkShare 获取5分钟K线数据"""
+    """
+    使用 AkShare 获取5分钟K线数据（V16改造版）：
+    - 对于道通转债 118013 等可转债，直接走日线 bond_zh_hs_daily，作为『日线准实时』
+    - 其他标的仍然使用 A 股5分钟 / 日线接口
+    """
+    # 特殊处理：可转债 118013（道通转债）使用日线接口
+    baostock_code = code_info.get('baostock', '')
+    ts_code = code_info.get('tushare', '')
+    ak_code = code_info.get('akshare', '')
+    if baostock_code == 'sh.118013' or ts_code == '118013.SH' or ak_code == '118013':
+        df = fetch_bond_daily_quasi_realtime('sh.118013', days=365)
+        if df is not None and len(df) > 0:
+            latest_date = df['date'].iloc[-1]
+            print(f"   📊 数据来源: akshare 可转债日线 (bond_zh_hs_daily)")
+            print(f"   📅 最新日线日期: {latest_date.strftime('%Y-%m-%d')}")
+            print("   💡 说明: 可转债不支持5分钟级别实时数据，当前为按日线更新的『准实时』预测")
+        return df
+
+    # 普通股票：沿用原来的5分钟/日线逻辑
     try:
         import akshare as ak
         symbol = code_info['akshare']
         today = datetime.date.today()
         start_date = (today - datetime.timedelta(days=days)).strftime('%Y%m%d')
         end_date = today.strftime('%Y%m%d')
-        
+
         try:
             df = ak.stock_zh_a_hist_min_em(
                 symbol=symbol,
@@ -317,7 +390,7 @@ def fetch_akshare_5min(code_info, days=7):
                     df['time'] = df['date'] + '15000000'
                     return df[['date', 'time', 'close', 'volume']]
                 return None
-            
+
             column_mapping = {
                 '时间': 'time',
                 '收盘': 'close',
@@ -327,20 +400,20 @@ def fetch_akshare_5min(code_info, days=7):
             for old_col, new_col in column_mapping.items():
                 if old_col in df.columns:
                     df = df.rename(columns={old_col: new_col})
-            
+
             if 'time' in df.columns:
                 df['time'] = pd.to_datetime(df['time']).dt.strftime('%Y%m%d%H%M%S')
                 df['date'] = pd.to_datetime(df['time']).dt.strftime('%Y-%m-%d')
             elif 'date' in df.columns:
                 df['time'] = pd.to_datetime(df['date']).dt.strftime('%Y%m%d%H%M%S')
                 df['date'] = pd.to_datetime(df['date']).dt.strftime('%Y-%m-%d')
-            
+
             return df[['date', 'time', 'close', 'volume']]
-        except Exception as e:
+        except Exception:
             return None
     except ImportError:
         return None
-    except Exception as e:
+    except Exception:
         return None
 
 def init_trade_log():
@@ -1141,13 +1214,18 @@ STOCK_LIST = [
     {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip'},  # 稳健优秀
     {'code': 'sz.002706', 'name': '良信股份', 'model': 'ppo_stock_v7_002837.zip'},  # 模型切换成功（使用英维克模型）
     {'code': 'sz.301005', 'name': '超捷股份', 'model': 'ppo_stock_v7_301005.zip'},  # 回撤风险高
-    {'code': 'sh.601399', 'name': '国机重装', 'model': 'ppo_stock_v7_601399.zip'},  # 零回撤稳健策略
     {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300153.zip'},  # 回撤较大
-    {'code': 'sz.300274', 'name': '阳光电源', 'model': 'ppo_stock_v7_300274.zip'},  # 风控好
     {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_603267.zip'},  # ⚠️ 高危
     {'code': 'sh.603698', 'name': '航天工程', 'model': 'ppo_stock_v7_603698.zip'},
     {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7_002025.zip'},  # ⚠️ 表现最差
     {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip'},
+    # === 道通科技 & 道通转债（新增）===
+    {'code': 'sh.688208', 'name': '道通科技', 'model': 'ppo_stock_v7_688208.zip'},  # 道通科技专用模型
+    {'code': 'sh.118013', 'name': '道通转债', 'model': 'ppo_stock_v7_118013.zip'},  # 道通转债专用模型（可转债，日线为主）
+    # === 充电桩/电力设备板块（新增）===
+    {'code': 'sz.002335', 'name': '科华数据', 'model': 'ppo_stock_v7_002335.zip'},  # 科华数据专用模型
+    {'code': 'sz.002364', 'name': '中恒电气', 'model': 'ppo_stock_v7_002364.zip'},  # 中恒电气专用模型
+    {'code': 'sz.002518', 'name': '科士达', 'model': 'ppo_stock_v7_002364.zip'},  # 科士达（使用中恒电气模型）
 ]
 
 # 当前处理的股票代码（会在循环中动态设置）
