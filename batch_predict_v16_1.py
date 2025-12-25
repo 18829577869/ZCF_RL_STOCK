@@ -262,6 +262,7 @@ def get_stock_name(code):
         'sz.002335': '科华数据',
         'sz.002364': '中恒电气',
         'sz.002518': '科士达',
+        'sz.301389': '隆扬电子',
     }
     return stock_name_map.get(code, code)  # 如果找不到，返回代码本身
 
@@ -1203,29 +1204,52 @@ def display_prediction_accuracy(stock_code):
 # 基础配置
 MODEL_PATH = "ppo_stock_v7_002025.zip"  # V12使用通用PPO模型，也可以使用专用模型
 
-# 批量预测：股票列表（仅包含有专用模型的股票）
+# 批量预测：股票列表（按照最新V16最优模型映射表配置）
 STOCK_LIST = [
-    {'code': 'sz.002837', 'name': '英维克', 'model': 'ppo_stock_v7_002837.zip'},  # 🏆 双料冠军
-    {'code': 'sz.002851', 'name': '麦格米特', 'model': 'ppo_stock_v7_002851.zip'},  # 收益顶尖
-    {'code': 'sh.600730', 'name': '中国高科', 'model': 'ppo_stock_v7_600730.zip'},  # 最大黑马
-    {'code': 'sz.002241', 'name': '歌尔股份', 'model': 'ppo_stock_v7_002241.zip'},  # 通用模型典范
-    {'code': 'sz.002475', 'name': '立讯精密', 'model': 'ppo_stock_v7_002475.zip'},  # 极品策略
-    {'code': 'sz.300499', 'name': '高澜股份', 'model': 'ppo_stock_v7_300499.zip'},  # 零回撤之王
-    {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip'},  # 稳健优秀
-    {'code': 'sz.002706', 'name': '良信股份', 'model': 'ppo_stock_v7_002837.zip'},  # 模型切换成功（使用英维克模型）
-    {'code': 'sz.301005', 'name': '超捷股份', 'model': 'ppo_stock_v7_301005.zip'},  # 回撤风险高
-    {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300153.zip'},  # 回撤较大
-    {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_603267.zip'},  # ⚠️ 高危
-    {'code': 'sh.603698', 'name': '航天工程', 'model': 'ppo_stock_v7_603698.zip'},
-    {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7_002025.zip'},  # ⚠️ 表现最差
-    {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip'},
-    # === 道通科技 & 道通转债（新增）===
-    {'code': 'sh.688208', 'name': '道通科技', 'model': 'ppo_stock_v7_688208.zip'},  # 道通科技专用模型
-    {'code': 'sh.118013', 'name': '道通转债', 'model': 'ppo_stock_v7_118013.zip'},  # 道通转债专用模型（可转债，日线为主）
-    # === 充电桩/电力设备板块（新增）===
-    {'code': 'sz.002335', 'name': '科华数据', 'model': 'ppo_stock_v7_002335.zip'},  # 科华数据专用模型
-    {'code': 'sz.002364', 'name': '中恒电气', 'model': 'ppo_stock_v7_002364.zip'},  # 中恒电气专用模型
-    {'code': 'sz.002518', 'name': '科士达', 'model': 'ppo_stock_v7_002364.zip'},  # 科士达（使用中恒电气模型）
+    # 1   sz.002706 良信股份 → 使用英维克(002837)模型
+    {'code': 'sz.002706', 'name': '良信股份', 'model': 'ppo_stock_v7_002837.zip'},  # 🔵 稳健型：英维克(002837)模型
+    # 2   sh.688208 道通科技 → 使用道通转债(118013)模型
+    {'code': 'sh.688208', 'name': '道通科技', 'model': 'ppo_stock_v7_118013.zip'},  # 🔵 稳健型：道通转债(118013)模型
+    # 3   sz.002241 歌尔股份 → 使用圣邦股份(300661)模型
+    {'code': 'sz.002241', 'name': '歌尔股份', 'model': 'ppo_stock_v7_300661.zip'},  # 🔵 稳健型：圣邦股份(300661)模型
+    # 6   sz.002475 立讯精密 → 使用隆扬电子(301389)模型
+    {'code': 'sz.002475', 'name': '立讯精密', 'model': 'ppo_stock_v7_301389.zip'},  # 🟢 均衡型：隆扬电子(301389)模型
+    # 8   sz.300499 高澜股份 → 使用自身模型
+    {'code': 'sz.300499', 'name': '高澜股份', 'model': 'ppo_stock_v7_300499.zip'},  # 🟡 进取型：自身模型
+    # 9   sh.603267 鸿远电子 → 使用航天电器(002025)模型
+    {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_002025.zip'},  # 🔵 稳健型：航天电器(002025)模型
+    # 10  sz.002335 科华数据 → 使用自身模型
+    {'code': 'sz.002335', 'name': '科华数据', 'model': 'ppo_stock_v7_002335.zip'},  # 🟡 进取型：自身模型
+    # 11  sz.002851 麦格米特 → 使用自身模型
+    {'code': 'sz.002851', 'name': '麦格米特', 'model': 'ppo_stock_v7_002851.zip'},  # 🟢 均衡型：自身模型
+    # 12  sh.118013 道通转债 → 使用自身模型
+    {'code': 'sh.118013', 'name': '道通转债', 'model': 'ppo_stock_v7_118013.zip'},  # 🟢 均衡型：自身模型
+    # 13  sz.300153 科泰电源 → 使用高澜股份(300499)模型
+    {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300499.zip'},  # 🔵 稳健型：高澜股份(300499)模型
+    # 15  sz.300762 上海瀚讯 → 使用自身模型
+    {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip'},  # 🟢 均衡型：自身模型
+    # 4   sz.301005 超捷股份 → 使用中国高科(600730)模型
+    {'code': 'sz.301005', 'name': '超捷股份', 'model': 'ppo_stock_v7_600730.zip'},  # 🟡 进取型：中国高科(600730)模型
+    # 5   sh.603698 航天工程 → 使用自身模型
+    {'code': 'sh.603698', 'name': '航天工程', 'model': 'ppo_stock_v7_603698.zip'},  # 🟢 均衡型：自身模型
+    # 16  sz.300726 宏达电子 → 使用自身模型
+    {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip'},  # 🟢 均衡型：自身模型
+    # 17  sz.002025 航天电器 → 使用航天工程(603698)模型
+    {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7_603698.zip'},  # 🟢 均衡型：航天工程(603698)模型
+    # 18  sz.002837 英维克 → 使用自身模型
+    {'code': 'sz.002837', 'name': '英维克', 'model': 'ppo_stock_v7_002837.zip'},  # 🔴 高风险：自身模型
+    # 19  sh.600730 中国高科 → 使用自身模型
+    {'code': 'sh.600730', 'name': '中国高科', 'model': 'ppo_stock_v7_600730.zip'},  # 🟡 进取型：自身模型
+    # 20  sz.002364 中恒电气 → 使用自身模型
+    {'code': 'sz.002364', 'name': '中恒电气', 'model': 'ppo_stock_v7_002364.zip'},  # 🔴 高风险：自身模型
+    # 22  sz.002518 科士达 → 使用科华数据(002335)模型
+    {'code': 'sz.002518', 'name': '科士达', 'model': 'ppo_stock_v7_002335.zip'},  # 🔴 高风险：科华数据(002335)模型
+    # 7   sz.300274 阳光电源 → 使用麦格米特(002851)模型
+    {'code': 'sz.300274', 'name': '阳光电源', 'model': 'ppo_stock_v7_002851.zip'},  # 🟢 均衡型：麦格米特(002851)模型
+    # 21  sh.601399 国机重装 → 使用自身模型
+    {'code': 'sh.601399', 'name': '国机重装', 'model': 'ppo_stock_v7_601399.zip'},  # 🟢 均衡型：自身模型
+    # 14  sz.301389 隆扬电子 → 使用自身模型
+    {'code': 'sz.301389', 'name': '隆扬电子', 'model': 'ppo_stock_v7_301389.zip'},  # 🔴 高风险：自身模型
 ]
 
 # 当前处理的股票代码（会在循环中动态设置）
@@ -3234,22 +3258,23 @@ def calculate_v7_price_suggestions(current_price, ppo_action, historical_prices=
     price_interval_size = current_price * price_interval_pct / 100
     
     # 根据PPO动作确定价格区间的中心偏移
-    # 调整策略：使当前价格更可能落在区间的中下部，这样仓位会更合理
+    # 调整策略：使当前价格落在与PPO动作相符的仓位区间
     center_offset = 0.0
     if ppo_action == 6:  # 买入 100%
-        center_offset = -price_interval_size * 0.3  # 向下偏移更多，使当前价格更容易触发买入
-    elif ppo_action == 5:  # 买入 50%
-        center_offset = -price_interval_size * 0.2
-    elif ppo_action == 4:  # 买入 25%
-        center_offset = -price_interval_size * 0.1
-    elif ppo_action == 3:  # 持有
-        center_offset = -price_interval_size * 0.1  # 持有也向下偏移，使当前价格在区间中下部
-    elif ppo_action == 2:  # 卖出 25%
-        center_offset = price_interval_size * 0.0  # 不偏移
-    elif ppo_action == 1:  # 卖出 50%
-        center_offset = price_interval_size * 0.1
-    elif ppo_action == 0:  # 卖出 100%
-        center_offset = price_interval_size * 0.2  # 向上偏移，使当前价格更容易触发卖出
+        # 当前价格应该落在价格区间的下端（接近100%仓位价格），使计算出的仓位接近100%
+        center_offset = price_interval_size * 0.3  # 向上偏移，使当前价格在区间下端
+    elif ppo_action == 5:  # 买入 50%（目标75%仓位）
+        center_offset = price_interval_size * 0.15  # 向上偏移，使当前价格在区间中下部
+    elif ppo_action == 4:  # 买入 25%（目标75%仓位）
+        center_offset = price_interval_size * 0.1  # 向上偏移，使当前价格在区间中下部
+    elif ppo_action == 3:  # 持有（目标50%仓位）
+        center_offset = price_interval_size * 0.0  # 不偏移，使当前价格在区间中部
+    elif ppo_action == 2:  # 卖出 25%（目标75%仓位，即保留75%）
+        center_offset = -price_interval_size * 0.1  # 向下偏移，使当前价格在区间中上部
+    elif ppo_action == 1:  # 卖出 50%（目标50%仓位）
+        center_offset = -price_interval_size * 0.15  # 向下偏移，使当前价格在区间中上部
+    elif ppo_action == 0:  # 卖出 100%（目标0%仓位）
+        center_offset = -price_interval_size * 0.3  # 向下偏移，使当前价格在区间上端
     
     # 计算价格区间的中心点
     price_center = current_price + center_offset
@@ -3977,7 +4002,98 @@ def refine_holographic_signal(holo_result, closes, indicator_summary, fallback_u
 # ==================== V13: 资金管理策略（凯利公式） ====================
 
 # V13: 交易历史记录（用于计算凯利公式参数）
-trade_history = []  # [{'action': 'buy'/'sell', 'price': float, 'timestamp': datetime, 'profit_pct': float}]
+# 每个股票独立的交易历史，key为股票代码，value为交易记录列表
+trade_history_dict = {}  # {stock_code: [{'action': 'buy'/'sell', 'price': float, 'date': str, 'predicted_return_pct': float, 'confidence': float}]}
+
+def get_trade_history_file(stock_code):
+    """获取交易历史文件路径"""
+    os.makedirs('trade_history', exist_ok=True)
+    # 清理股票代码中的特殊字符，用于文件名
+    safe_code = stock_code.replace('.', '_').replace('/', '_')
+    return f'trade_history/{safe_code}.json'
+
+def load_trade_history(stock_code):
+    """加载指定股票的交易历史"""
+    file_path = get_trade_history_file(stock_code)
+    if os.path.exists(file_path):
+        try:
+            with open(file_path, 'r', encoding='utf-8') as f:
+                data = json.load(f)
+                # 确保数据格式正确
+                if isinstance(data, list):
+                    return data
+                else:
+                    return []
+        except Exception as e:
+            print(f"   ⚠️  加载交易历史失败 ({stock_code}): {e}")
+            return []
+    return []
+
+def save_trade_history(stock_code, trade_history):
+    """保存指定股票的交易历史"""
+    file_path = get_trade_history_file(stock_code)
+    try:
+        with open(file_path, 'w', encoding='utf-8') as f:
+            json.dump(trade_history, f, indent=2, ensure_ascii=False)
+    except Exception as e:
+        print(f"   ⚠️  保存交易历史失败 ({stock_code}): {e}")
+
+def update_trade_history_from_prediction(stock_code, current_price, predicted_return_pct, confidence, final_operation, date_str):
+    """
+    根据模型预测更新交易样本
+    参数:
+    - stock_code: 股票代码
+    - current_price: 当前价格
+    - predicted_return_pct: 预测收益率（%）
+    - confidence: 模型置信度（0-1）
+    - final_operation: 最终操作（如"买入25%"、"卖出50%"等）
+    - date_str: 日期字符串（YYYY-MM-DD）
+    """
+    # 加载该股票的历史记录
+    trade_history = load_trade_history(stock_code)
+    
+    # 检查今天是否已经添加过记录（避免重复添加）
+    today_records = [t for t in trade_history if t.get('date') == date_str]
+    if today_records:
+        # 如果今天已有记录，更新它（使用最新的预测）
+        today_records[0].update({
+            'price': float(current_price),
+            'predicted_return_pct': float(predicted_return_pct),
+            'confidence': float(confidence),
+            'operation': final_operation,
+            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        })
+    else:
+        # 确定操作类型（buy/sell/hold）
+        action = 'hold'
+        if '买入' in final_operation:
+            action = 'buy'
+        elif '卖出' in final_operation:
+            action = 'sell'
+        
+        # 添加新的交易样本
+        trade_record = {
+            'action': action,
+            'price': float(current_price),
+            'date': date_str,
+            'predicted_return_pct': float(predicted_return_pct),
+            'confidence': float(confidence),
+            'operation': final_operation,
+            'timestamp': datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        }
+        trade_history.append(trade_record)
+    
+    # 只保留最近N条记录（避免文件过大，保留最近200条）
+    if len(trade_history) > 200:
+        trade_history = trade_history[-200:]
+    
+    # 保存更新后的历史记录
+    save_trade_history(stock_code, trade_history)
+    
+    # 更新内存中的字典
+    trade_history_dict[stock_code] = trade_history
+    
+    return trade_history
 
 def calculate_kelly_formula(win_rate, avg_win_pct, avg_loss_pct):
     """
@@ -4016,15 +4132,22 @@ def calculate_kelly_formula(win_rate, avg_win_pct, avg_loss_pct):
 
 def calculate_trade_statistics(trade_history, min_samples=KELLY_MIN_SAMPLES):
     """
-    从交易历史计算统计指标
+    从交易历史计算统计指标（支持基于预测的交易样本）
     返回: (win_rate, avg_win_pct, avg_loss_pct, total_trades)
     """
     if len(trade_history) < min_samples:
         return None, None, None, len(trade_history)
     
-    # 提取盈利交易
-    profitable_trades = [t for t in trade_history if t.get('profit_pct', 0) > 0]
-    losing_trades = [t for t in trade_history if t.get('profit_pct', 0) < 0]
+    # 提取盈利交易（支持 profit_pct 或 predicted_return_pct）
+    profitable_trades = []
+    losing_trades = []
+    for t in trade_history:
+        # 优先使用 profit_pct（实际交易结果），如果没有则使用 predicted_return_pct（预测结果）
+        return_pct = t.get('profit_pct') if 'profit_pct' in t else t.get('predicted_return_pct', 0)
+        if return_pct > 0:
+            profitable_trades.append(t)
+        elif return_pct < 0:
+            losing_trades.append(t)
     
     if len(profitable_trades) == 0 and len(losing_trades) == 0:
         return None, None, None, len(trade_history)
@@ -4034,11 +4157,14 @@ def calculate_trade_statistics(trade_history, min_samples=KELLY_MIN_SAMPLES):
     winning_trades = len(profitable_trades)
     win_rate = winning_trades / total_trades if total_trades > 0 else 0
     
-    # 计算平均盈利
-    avg_win_pct = np.mean([t['profit_pct'] for t in profitable_trades]) if len(profitable_trades) > 0 else 0
+    # 计算平均盈利（支持 profit_pct 或 predicted_return_pct）
+    def get_return_pct(t):
+        return t.get('profit_pct') if 'profit_pct' in t else t.get('predicted_return_pct', 0)
+    
+    avg_win_pct = np.mean([get_return_pct(t) for t in profitable_trades]) if len(profitable_trades) > 0 else 0
     
     # 计算平均亏损（取绝对值）
-    avg_loss_pct = abs(np.mean([t['profit_pct'] for t in losing_trades])) if len(losing_trades) > 0 else 1.0
+    avg_loss_pct = abs(np.mean([get_return_pct(t) for t in losing_trades])) if len(losing_trades) > 0 else 1.0
     
     return win_rate, avg_win_pct, avg_loss_pct, total_trades
 
@@ -4112,13 +4238,13 @@ def estimate_kelly_from_prediction(confidence, predicted_return_pct, indicator_s
     
     return estimated_win_rate, estimated_avg_win, estimated_avg_loss
 
-def get_kelly_position_size(confidence, predicted_return_pct, trade_history, indicator_summary=None, volatility_pct=None):
+def get_kelly_position_size(confidence, predicted_return_pct, stock_code, indicator_summary=None, volatility_pct=None):
     """
     根据凯利公式计算最优仓位（支持样本不足时的预测估算）
     参数:
     - confidence: 模型置信度（0-1）
     - predicted_return_pct: 预测收益率（%）
-    - trade_history: 交易历史
+    - stock_code: 股票代码（用于获取该股票的交易历史）
     - indicator_summary: 技术指标摘要（可选）
     - volatility_pct: 波动率（%）（可选）
     
@@ -4126,6 +4252,11 @@ def get_kelly_position_size(confidence, predicted_return_pct, trade_history, ind
     """
     if not ENABLE_KELLY_FORMULA:
         return None
+    
+    # 获取该股票的交易历史（从内存或文件加载）
+    if stock_code not in trade_history_dict:
+        trade_history_dict[stock_code] = load_trade_history(stock_code)
+    trade_history = trade_history_dict[stock_code]
     
     # 计算交易统计
     win_rate, avg_win_pct, avg_loss_pct, total_trades = calculate_trade_statistics(trade_history)
@@ -4427,6 +4558,46 @@ print("\n" + "=" * 70)
 print("🚀 V16批量预测系统 - 批量运行所有V16预测股票")
 print("=" * 70)
 print(f"📊 股票数量: {len(STOCK_LIST)}")
+# ==================== 打印最优模型列表 ====================
+print("\n" + "=" * 120)
+print(" " * 30 + "📊 V16 最优模型配置列表")
+print("=" * 120)
+print(f"{'排名':<6} | {'股票代码与名称':<20} | {'推荐的最优模型':<25} | {'夏普比率':<10} | {'总收益率':<12} | {'最大回撤':<12} | {'策略分类':<12}")
+print("-" * 120)
+
+# 最优模型列表数据
+optimal_models_info = [
+    {'rank': 1, 'code': 'sz.002706', 'name': '良信股份', 'model': '英维克(002837)模型', 'sharpe': 3.25, 'return': 70.38, 'drawdown': 3.92, 'strategy': '🔵 稳健型'},
+    {'rank': 2, 'code': 'sh.688208', 'name': '道通科技', 'model': '道通转债(118013)模型', 'sharpe': 2.87, 'return': 33.70, 'drawdown': 2.42, 'strategy': '🔵 稳健型'},
+    {'rank': 3, 'code': 'sz.002241', 'name': '歌尔股份', 'model': '圣邦股份(300661)模型', 'sharpe': 2.51, 'return': 66.15, 'drawdown': 9.38, 'strategy': '🔵 稳健型'},
+    {'rank': 4, 'code': 'sz.301005', 'name': '超捷股份', 'model': '中国高科(600730)模型', 'sharpe': 2.54, 'return': 248.88, 'drawdown': 27.24, 'strategy': '🟡 进取型'},
+    {'rank': 5, 'code': 'sh.603698', 'name': '航天工程', 'model': '航天工程(603698)模型', 'sharpe': 2.69, 'return': 52.81, 'drawdown': 8.38, 'strategy': '🟢 均衡型'},
+    {'rank': 6, 'code': 'sz.002475', 'name': '立讯精密', 'model': '隆扬电子(301389)模型', 'sharpe': 2.43, 'return': 68.03, 'drawdown': 10.64, 'strategy': '🟢 均衡型'},
+    {'rank': 7, 'code': 'sz.300274', 'name': '阳光电源', 'model': '麦格米特(002851)模型', 'sharpe': 2.42, 'return': 71.18, 'drawdown': 9.42, 'strategy': '🟢 均衡型'},
+    {'rank': 8, 'code': 'sz.300499', 'name': '高澜股份', 'model': '高澜股份(300499)模型', 'sharpe': 2.41, 'return': 105.36, 'drawdown': 17.00, 'strategy': '🟡 进取型'},
+    {'rank': 9, 'code': 'sh.603267', 'name': '鸿远电子', 'model': '航天电器(002025)模型', 'sharpe': 2.40, 'return': 33.96, 'drawdown': 3.17, 'strategy': '🔵 稳健型'},
+    {'rank': 10, 'code': 'sz.002335', 'name': '科华数据', 'model': '科华数据(002335)模型', 'sharpe': 2.28, 'return': 103.71, 'drawdown': 14.82, 'strategy': '🟡 进取型'},
+    {'rank': 11, 'code': 'sz.002851', 'name': '麦格米特', 'model': '麦格米特(002851)模型', 'sharpe': 2.20, 'return': 33.24, 'drawdown': 7.18, 'strategy': '🟢 均衡型'},
+    {'rank': 12, 'code': 'sh.118013', 'name': '道通转债', 'model': '道通转债(118013)模型', 'sharpe': 2.12, 'return': 33.41, 'drawdown': 7.41, 'strategy': '🟢 均衡型'},
+    {'rank': 13, 'code': 'sz.300153', 'name': '科泰电源', 'model': '高澜股份(300499)模型', 'sharpe': 2.08, 'return': 47.51, 'drawdown': 4.52, 'strategy': '🔵 稳健型'},
+    {'rank': 14, 'code': 'sz.301389', 'name': '隆扬电子', 'model': '隆扬电子(301389)模型', 'sharpe': 1.91, 'return': 130.63, 'drawdown': 45.41, 'strategy': '🔴 高风险'},
+    {'rank': 15, 'code': 'sz.300762', 'name': '上海瀚讯', 'model': '上海瀚讯(300762)模型', 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},
+    {'rank': 16, 'code': 'sz.300726', 'name': '宏达电子', 'model': '宏达电子(300726)模型', 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},
+    {'rank': 17, 'code': 'sz.002025', 'name': '航天电器', 'model': '航天工程(603698)模型', 'sharpe': 1.75, 'return': 24.11, 'drawdown': 4.62, 'strategy': '🟢 均衡型'},
+    {'rank': 18, 'code': 'sz.002837', 'name': '英维克', 'model': '英维克(002837)模型', 'sharpe': 1.75, 'return': 62.26, 'drawdown': 24.74, 'strategy': '🔴 高风险'},
+    {'rank': 19, 'code': 'sh.600730', 'name': '中国高科', 'model': '中国高科(600730)模型', 'sharpe': 1.64, 'return': 54.65, 'drawdown': 17.39, 'strategy': '🟡 进取型'},
+    {'rank': 20, 'code': 'sz.002364', 'name': '中恒电气', 'model': '中恒电气(002364)模型', 'sharpe': 1.39, 'return': 57.38, 'drawdown': 31.54, 'strategy': '🔴 高风险'},
+    {'rank': 21, 'code': 'sh.601399', 'name': '国机重装', 'model': '国机重装(601399)模型', 'sharpe': 1.32, 'return': 31.37, 'drawdown': 14.69, 'strategy': '🟢 均衡型'},
+    {'rank': 22, 'code': 'sz.002518', 'name': '科士达', 'model': '科华数据(002335)模型', 'sharpe': 1.31, 'return': 40.63, 'drawdown': 28.34, 'strategy': '🔴 高风险'},
+]
+
+for info in optimal_models_info:
+    stock_display = f"{info['code']} {info['name']}"
+    print(f"{info['rank']:<6} | {stock_display:<20} | {info['model']:<25} | {info['sharpe']:<10.2f} | {info['return']:>+10.2f}% | {info['drawdown']:>10.2f}% | {info['strategy']:<12}")
+
+print("-" * 120)
+print("=" * 120 + "\n")
+
 print(f"📋 股票列表:")
 for i, stock in enumerate(STOCK_LIST, 1):
     print(f"   {i}. {stock['name']}({stock['code']})")
@@ -4520,6 +4691,21 @@ with open(log_file, 'w', encoding='utf-8') as f:
     f.write(f"V16批量预测日志 - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}\n")
     f.write("=" * 70 + "\n")
     f.write(f"股票数量: {len(STOCK_LIST)}\n")
+    
+    # 写入最优模型配置列表
+    f.write("\n" + "=" * 120 + "\n")
+    f.write(" " * 30 + "📊 V16 最优模型配置列表\n")
+    f.write("=" * 120 + "\n")
+    f.write(f"{'排名':<6} | {'股票代码与名称':<20} | {'推荐的最优模型':<25} | {'夏普比率':<10} | {'总收益率':<12} | {'最大回撤':<12} | {'策略分类':<12}\n")
+    f.write("-" * 120 + "\n")
+    
+    for info in optimal_models_info:
+        stock_display = f"{info['code']} {info['name']}"
+        f.write(f"{info['rank']:<6} | {stock_display:<20} | {info['model']:<25} | {info['sharpe']:<10.2f} | {info['return']:>+10.2f}% | {info['drawdown']:>10.2f}% | {info['strategy']:<12}\n")
+    
+    f.write("-" * 120 + "\n")
+    f.write("=" * 120 + "\n\n")
+    
     f.write(f"股票列表:\n")
     for i, stock in enumerate(STOCK_LIST, 1):
         f.write(f"   {i}. {stock['name']}({stock['code']})\n")
@@ -4625,6 +4811,7 @@ try:
                 latest_time = None
                 stock_name = get_stock_name(STOCK_CODE)
                 print(f"\n{'='*70}")
+                # 先打印标题，预测涨幅标注会在price_suggestions计算后添加
                 print(f"📊 第 {iteration_count} 轮预测 [{stock_name}({STOCK_CODE})] - {datetime.datetime.now().strftime('%Y-%m-%d %H:%M:%S')}")
                 print(f"{'='*70}")
                 
@@ -5349,20 +5536,24 @@ try:
                     print(f"      ✅ 调整后决策: {final_operation}")
                 elif conflict_info and conflict_info.get('avg_prediction') is not None:
                     # 无冲突，显示预测信息
+                    # 注意：这里使用原始预测跌幅，与仓位价格建议中的调整后跌幅可能不同
+                    # 仓位价格建议会根据PPO动作调整跌幅（买入倾向时降低看跌幅度）
                     price_change_pct = conflict_info.get('price_change_pct', 0)
                     direction = "上涨" if price_change_pct > 0 else "下跌"
                     abs_price_change = abs(price_change_pct)
                     
                     # V12优化：更详细地说明预测方向与决策的关系
+                    # 注意：这里显示的是原始预测跌幅，与下方"仓位价格建议"中的调整后跌幅可能不同
+                    # 预测价格金额一致，但跌幅百分比可能因PPO动作调整而不同
                     if abs_price_change < 1.5:
                         # 预测方向不明确（<1.5%），说明为何未触发冲突检测
                         if price_change_pct < 0:
-                            print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），预测方向不明确，未触发冲突检测，与PPO建议一致")
+                            print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%，原始预测），预测方向不明确，未触发冲突检测，与PPO建议一致")
                         else:
-                            print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），与PPO建议一致")
+                            print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%，原始预测），与PPO建议一致")
                     else:
                         # 预测方向明确但一致
-                        print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%），与PPO建议方向一致")
+                        print(f"   📊 预测价格: {conflict_info['avg_prediction']:.2f}元（预测{direction} {abs_price_change:.2f}%，原始预测），与PPO建议方向一致")
                 
                     if ENABLE_DYNAMIC_WEIGHTS:
                         print(f"   📊 动态权重: PPO={adjusted_weights['ppo']:.1%}, LSTM={adjusted_weights['lstm']:.1%}, Transformer={adjusted_weights['transformer']:.1%}, 全息={adjusted_weights['holographic']:.1%}")
@@ -5488,9 +5679,28 @@ try:
                         recent_returns = np.diff(closes[-20:]) / closes[-20:-1] * 100
                         volatility_pct = np.std(recent_returns) if len(recent_returns) > 0 else None
                     
+                    # 获取当前日期字符串（用于更新交易样本）
+                    current_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
+                    if 'latest_date' in locals() and latest_date:
+                        try:
+                            # 尝试从 latest_date 获取日期
+                            if isinstance(latest_date, str):
+                                current_date_str = latest_date.split()[0] if ' ' in latest_date else latest_date
+                            elif hasattr(latest_date, 'strftime'):
+                                current_date_str = latest_date.strftime('%Y-%m-%d')
+                        except:
+                            pass
+                    
+                    # 根据模型预测更新交易样本（每日更新）
+                    if final_operation and current_price > 0:
+                        trade_history = update_trade_history_from_prediction(
+                            STOCK_CODE, current_price, predicted_return_pct, 
+                            confidence, final_operation, current_date_str
+                        )
+                    
                     # 计算凯利公式最优仓位（支持样本不足时的预测估算）
                     kelly_info = get_kelly_position_size(
-                        confidence, predicted_return_pct, trade_history, 
+                        confidence, predicted_return_pct, STOCK_CODE, 
                         indicator_summary, volatility_pct
                     )
                 
@@ -5498,16 +5708,20 @@ try:
                     kelly_position = kelly_info['kelly_position']
                     is_estimated = kelly_info.get('is_estimated', False)
                     
+                    # 获取当前股票的交易历史数量
+                    current_trade_history = trade_history_dict.get(STOCK_CODE, [])
+                    trade_count = len(current_trade_history)
+                    
                     if is_estimated:
                         # 样本不足，使用预测估算
                         print(f"\n   📊 V13凯利公式资金管理（预测估算模式）:")
                         print(f"      🎯 最优仓位: {kelly_position*100:.1f}% (基于模型预测估算)")
-                        print(f"      ⚠️  注意: 当前交易样本不足（{len(trade_history)}/{KELLY_MIN_SAMPLES}），使用预测数据估算")
+                        print(f"      ⚠️  注意: 当前交易样本不足（{trade_count}/{KELLY_MIN_SAMPLES}），使用预测数据估算")
                         print(f"      📈 估算胜率: {kelly_info['win_rate']*100:.1f}% (基于置信度{confidence:.2f}和预测收益率{predicted_return_pct:.2f}%)")
                         print(f"      💰 估算平均盈利: {kelly_info['avg_win_pct']:.2f}% | 估算平均亏损: {kelly_info['avg_loss_pct']:.2f}%")
                         print(f"      📊 原始凯利值: {kelly_info['raw_kelly']*100:.1f}% | 安全凯利值: {kelly_info['safe_kelly']*100:.1f}%")
                         print(f"      💡 建议: 根据凯利公式（预测模式），当前最优仓位为{kelly_position*100:.1f}%")
-                        print(f"      📝 提示: 积累{KELLY_MIN_SAMPLES}个交易样本后，将使用历史统计数据进行更准确的仓位计算")
+                        print(f"      📝 提示: 交易样本基于模型预测每日更新，积累{KELLY_MIN_SAMPLES}个交易样本后，将使用历史统计数据进行更准确的仓位计算")
                     else:
                         # 样本充足，使用历史统计
                         print(f"\n   📊 V13凯利公式资金管理（历史统计模式）:")
@@ -5516,6 +5730,7 @@ try:
                         print(f"      💰 平均盈利: {kelly_info['avg_win_pct']:.2f}% | 平均亏损: {kelly_info['avg_loss_pct']:.2f}%")
                         print(f"      📊 原始凯利值: {kelly_info['raw_kelly']*100:.1f}% | 安全凯利值: {kelly_info['safe_kelly']*100:.1f}%")
                         print(f"      💡 建议: 根据凯利公式，当前最优仓位为{kelly_position*100:.1f}%")
+                        print(f"      📝 提示: 交易样本基于模型预测每日更新，当前已有{trade_count}个交易样本")
                 
                 # ========== V11: 仓位价格建议 ==========
                 suggested_buy_price = None
@@ -5541,7 +5756,22 @@ try:
                     price_diff_from_closest = abs(current_price - closest_price)
                     price_diff_pct_from_closest = (price_diff_from_closest / current_price * 100) if current_price > 0 else 0
                     
-                    print(f"\n   💡 仓位价格建议（基于预测价格 {price_suggestions['predicted_price']:.2f}元，预测{price_suggestions['direction']} {abs(price_suggestions['price_change_pct']):.2f}%）:")
+                    # 检查预测涨幅，如果是2%、3%或大于3%，添加重点标注
+                    # 注意：price_suggestions['price_change_pct']是根据PPO动作调整后的值
+                    # 如果PPO是买入倾向且预测下跌，会降低看跌幅度（乘以0.5），以反映PPO买入信号对预测的修正
+                    # 这与上方"预测价格"中显示的原始预测跌幅不同，但预测价格金额一致
+                    adjusted_price_change_pct = price_suggestions['price_change_pct']
+                    abs_adjusted_price_change = abs(adjusted_price_change_pct)
+                    highlight_marker = ""
+                    if price_suggestions['direction'] == '上涨':
+                        if abs(abs_adjusted_price_change - 2.0) < 0.1:  # 预测上涨约2%
+                            highlight_marker = " 🔥【重点标注：预测上涨2%】"
+                        elif abs(abs_adjusted_price_change - 3.0) < 0.1:  # 预测上涨约3%
+                            highlight_marker = " 🔥【重点标注：预测上涨3%】"
+                        elif abs_adjusted_price_change > 3.0:  # 预测上涨大于3%
+                            highlight_marker = f" 🔥【重点标注：预测上涨{abs_adjusted_price_change:.2f}%（大于3%）】"
+                    
+                    print(f"\n   💡 仓位价格建议（基于预测价格 {price_suggestions['predicted_price']:.2f}元，预测{price_suggestions['direction']} {abs_adjusted_price_change:.2f}%，已根据PPO动作调整）{highlight_marker}:")
                     print(f"      🟢 100%仓位: {suggestions['100%']:.2f}元 (价格越低，买入越多)")
                     print(f"      🟡 75%仓位:  {suggestions['75%']:.2f}元")
                     print(f"      🟠 50%仓位:  {suggestions['50%']:.2f}元")
@@ -5590,21 +5820,21 @@ try:
                                 elif current_position_pct <= 50:
                                     action_hint = f"⚠️  当前价格 {current_price:.2f}元 高于预测价格 {price_suggestions['predicted_price']:.2f}元（偏离{price_diff_from_pred:.2f}%），建议保持{current_position}仓位（价格偏离较大，动态调整）"
                                 else:
-                                    action_hint = f"✅ 融合决策「买入 100%」但当前价格 {current_price:.2f}元 高于预测价格（偏离{price_diff_from_pred:.2f}%），建议保持{current_position}仓位"
+                                    action_hint = f"✅ 融合决策「买入」但当前价格 {current_price:.2f}元 高于预测价格（偏离{price_diff_from_pred:.2f}%），建议保持{current_position}仓位"
                                 consistency_note = f"⚠️  价格偏离预测价格{price_diff_from_pred:.2f}%，已动态调整建议仓位"
                             else:
                                 # 当前价格低于预测价格，建议加仓
-                                action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 低于预测价格（偏离{price_diff_from_pred:.2f}%），建议加仓至{current_position}仓位"
-                                consistency_note = "✅ 与融合决策「买入 100%」一致"
+                                action_hint = f"✅ 融合决策「买入」+ 当前价格 {current_price:.2f}元 低于预测价格（偏离{price_diff_from_pred:.2f}%），建议加仓至{current_position}仓位"
+                                consistency_note = "✅ 与融合决策「买入」一致"
                         else:
                             # 价格偏离较小，遵循融合决策
                             if current_price <= suggestions['75%']:
-                                action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 在买入区间，建议满仓买入"
+                                action_hint = f"✅ 融合决策「买入」+ 当前价格 {current_price:.2f}元 在买入区间，建议满仓买入"
                             elif current_price <= suggestions['50%']:
-                                action_hint = f"✅ 融合决策「买入 100%」+ 当前价格 {current_price:.2f}元 接近买入区间，建议高仓位买入（目标100%仓位）"
+                                action_hint = f"✅ 融合决策「买入」+ 当前价格 {current_price:.2f}元 接近买入区间，建议高仓位买入（目标100%仓位）"
                             else:
-                                action_hint = f"✅ 融合决策「买入 100%」：虽然当前价格 {current_price:.2f}元 略高于预测价格，但模型建议买入，可考虑分批买入或等待回调至 {suggestions['75%']:.2f}元 以下"
-                            consistency_note = "✅ 与融合决策「买入 100%」一致"
+                                action_hint = f"✅ 融合决策「买入」：虽然当前价格 {current_price:.2f}元 略高于预测价格，但模型建议买入，可考虑分批买入或等待回调至 {suggestions['75%']:.2f}元 以下"
+                            consistency_note = "✅ 与融合决策「买入」一致"
                     elif final_action == 5:  # 买入 25%
                         if current_price <= suggestions['75%']:
                             action_hint = f"✅ 融合决策「买入 25%」+ 当前价格 {current_price:.2f}元 在买入区间，建议买入至75%仓位"
@@ -6341,6 +6571,18 @@ try:
                 # 保存预测结果
                 if save_batch_predict_result(STOCK_CODE, stock_name, prediction_data):
                     print(f"   ✅ 预测结果已保存到: {get_batch_predict_result_file()}")
+                
+                # 检查预测涨幅，如果是2%、3%或大于3%，在汇总处添加重点标注
+                predicted_change_pct = prediction_data.get('predicted_change_pct')
+                predicted_direction = prediction_data.get('predicted_direction')
+                if predicted_change_pct is not None and predicted_direction == '上涨':
+                    abs_change = abs(predicted_change_pct)
+                    if abs(abs_change - 2.0) < 0.1:  # 预测上涨约2%
+                        print(f"\n   🔥【重点标注】{stock_name}({STOCK_CODE}) 预测上涨2%，建议重点关注！")
+                    elif abs(abs_change - 3.0) < 0.1:  # 预测上涨约3%
+                        print(f"\n   🔥【重点标注】{stock_name}({STOCK_CODE}) 预测上涨3%，建议重点关注！")
+                    elif abs_change > 3.0:  # 预测上涨大于3%
+                        print(f"\n   🔥【重点标注】{stock_name}({STOCK_CODE}) 预测上涨{abs_change:.2f}%（大于3%），强烈建议重点关注！")
             except Exception as e:
                 print(f"   ⚠️  保存预测结果失败: {e}")
                 import traceback

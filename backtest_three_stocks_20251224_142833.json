@@ -1,0 +1,20 @@
+[
+  {
+    "stock_code": "sh.600730",
+    "stock_name": "中国高科",
+    "status": "failed",
+    "error": "未找到数据文件"
+  },
+  {
+    "stock_code": "sh.118013",
+    "stock_name": "道通转债",
+    "status": "failed",
+    "error": "未找到数据文件"
+  },
+  {
+    "stock_code": "sz.301005",
+    "stock_name": "超捷股份",
+    "status": "failed",
+    "error": "未找到数据文件"
+  }
+]

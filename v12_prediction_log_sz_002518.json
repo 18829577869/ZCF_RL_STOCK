@@ -10,5 +10,17 @@
     "predicted_price": 50.654862319231036,
     "current_price": 50.61,
     "timestamp": "2025-12-23 19:17:09"
+  },
+  {
+    "date": "2025-12-24",
+    "predicted_price": 52.27906004369259,
+    "current_price": 51.64,
+    "timestamp": "2025-12-24 19:07:36"
+  },
+  {
+    "date": "2025-12-25",
+    "predicted_price": 51.10105215370655,
+    "current_price": 51.14,
+    "timestamp": "2025-12-25 18:10:02"
   }
 ]

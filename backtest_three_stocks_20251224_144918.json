@@ -1,0 +1,30 @@
+[
+  {
+    "stock_code": "sh.600730",
+    "stock_name": "中国高科",
+    "model_path": "ppo_stock_v7_600730.zip",
+    "data_file": "stockdata_v7_600730/train\\sh.600730.中国高科.csv",
+    "status": "success",
+    "initial_balance": 100000.0,
+    "final_net_worth": 78196.29001561004,
+    "total_return": -21.80370998438996,
+    "annual_return": -21.80370998438996,
+    "max_drawdown_pct": 32.527363202083706,
+    "sharpe_ratio": -0.4752064858126204,
+    "trading_days": 6674,
+    "steps": 2074,
+    "max_drawdown_info": {
+      "max_drawdown_pct": 32.527363202083706,
+      "peak_value": 115893.33650886001,
+      "trough_value": 78196.29001561004,
+      "peak_index": 1934,
+      "trough_index": 2074
+    }
+  },
+  {
+    "stock_code": "sz.301005",
+    "stock_name": "超捷股份",
+    "status": "failed",
+    "error": "未找到数据文件"
+  }
+]

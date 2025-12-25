@@ -1,0 +1,20 @@
+[
+  {
+    "action": "buy",
+    "price": 28.99,
+    "date": "2025-12-24",
+    "predicted_return_pct": -1.288535616323013,
+    "confidence": 0.5,
+    "operation": "买入 100%",
+    "timestamp": "2025-12-24 17:59:50"
+  },
+  {
+    "action": "buy",
+    "price": 28.73,
+    "date": "2025-12-25",
+    "predicted_return_pct": -0.3501036567137031,
+    "confidence": 0.5,
+    "operation": "买入 100%",
+    "timestamp": "2025-12-25 17:25:19"
+  }
+]
