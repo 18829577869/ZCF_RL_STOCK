@@ -123,6 +123,10 @@ for stock in stocks:
         result['date'] = pd.to_datetime(result['date'])
         result = result.sort_values('date')
         
+        # 过滤停牌日
+        result['tradestatus'] = pd.to_numeric(result['tradestatus'], errors='coerce')
+        result = result[result['tradestatus'] == 1]
+        
         # 分割训练集和测试集（以2024-12-31为分界）
         train_data = result[result['date'] <= '2024-12-31']
         test_data = result[result['date'] > '2024-12-31']
@@ -141,8 +145,8 @@ for stock in stocks:
         train_file = f'stockdata_v7_601012/train/{code}.{name}.csv'
         test_file = f'stockdata_v7_601012/test/{code}.{name}.csv'
         
-        train_data.to_csv(train_file, index=False)
-        test_data.to_csv(test_file, index=False)
+        train_data.to_csv(train_file, index=False, encoding='utf-8-sig')
+        test_data.to_csv(test_file, index=False, encoding='utf-8-sig')
         
         print(f"  [保存] 训练: {len(train_data)} | 测试: {len(test_data)}")
         success_count += 1

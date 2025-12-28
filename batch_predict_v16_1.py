@@ -263,6 +263,8 @@ def get_stock_name(code):
         'sz.002364': '中恒电气',
         'sz.002518': '科士达',
         'sz.301389': '隆扬电子',
+        'sz.300811': '铂科新材',
+        'sh.601012': '隆基绿能',
     }
     return stock_name_map.get(code, code)  # 如果找不到，返回代码本身
 
@@ -699,8 +701,8 @@ STOCK_METRICS_DATA = {
     'sz.300274': {'total_return': 635.03, 'max_drawdown': 2.23, 'sharpe_ratio': None},  # 阳光电源 - 风控好
     'sh.603267': {'total_return': 318.23, 'max_drawdown': 18.54, 'sharpe_ratio': None},  # 鸿远电子 - ⚠️ 高危
     'sz.002025': {'total_return': 10.43, 'max_drawdown': 22.06, 'sharpe_ratio': None},  # 航天电器 - ⚠️ 表现最差
-    # 以下股票不在排名列表中，保留原配置
-    'sh.603698': {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None},  # 航天工程
+    # 以下股票不在排名列表中，保留原配置（模型保留，但不进行预测）
+    'sh.603698': {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None},  # 航天工程 - 模型保留，不预测
     'sz.300726': {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None},  # 宏达电子
     'sz.301017': {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None},  # 漱玉平民
     'sz.300749': {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None},  # 顶固集创
@@ -1204,52 +1206,46 @@ def display_prediction_accuracy(stock_code):
 # 基础配置
 MODEL_PATH = "ppo_stock_v7_002025.zip"  # V12使用通用PPO模型，也可以使用专用模型
 
-# 批量预测：股票列表（按照最新V16最优模型映射表配置）
+# 批量预测：股票列表（按照最新V16最优模型映射表配置，按排名排序）
 STOCK_LIST = [
     # 1   sz.002706 良信股份 → 使用英维克(002837)模型
-    {'code': 'sz.002706', 'name': '良信股份', 'model': 'ppo_stock_v7_002837.zip'},  # 🔵 稳健型：英维克(002837)模型
-    # 2   sh.688208 道通科技 → 使用道通转债(118013)模型
-    {'code': 'sh.688208', 'name': '道通科技', 'model': 'ppo_stock_v7_118013.zip'},  # 🔵 稳健型：道通转债(118013)模型
-    # 3   sz.002241 歌尔股份 → 使用圣邦股份(300661)模型
-    {'code': 'sz.002241', 'name': '歌尔股份', 'model': 'ppo_stock_v7_300661.zip'},  # 🔵 稳健型：圣邦股份(300661)模型
-    # 6   sz.002475 立讯精密 → 使用隆扬电子(301389)模型
-    {'code': 'sz.002475', 'name': '立讯精密', 'model': 'ppo_stock_v7_301389.zip'},  # 🟢 均衡型：隆扬电子(301389)模型
-    # 8   sz.300499 高澜股份 → 使用自身模型
-    {'code': 'sz.300499', 'name': '高澜股份', 'model': 'ppo_stock_v7_300499.zip'},  # 🟡 进取型：自身模型
-    # 9   sh.603267 鸿远电子 → 使用航天电器(002025)模型
-    {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_002025.zip'},  # 🔵 稳健型：航天电器(002025)模型
-    # 10  sz.002335 科华数据 → 使用自身模型
-    {'code': 'sz.002335', 'name': '科华数据', 'model': 'ppo_stock_v7_002335.zip'},  # 🟡 进取型：自身模型
-    # 11  sz.002851 麦格米特 → 使用自身模型
-    {'code': 'sz.002851', 'name': '麦格米特', 'model': 'ppo_stock_v7_002851.zip'},  # 🟢 均衡型：自身模型
-    # 12  sh.118013 道通转债 → 使用自身模型
-    {'code': 'sh.118013', 'name': '道通转债', 'model': 'ppo_stock_v7_118013.zip'},  # 🟢 均衡型：自身模型
-    # 13  sz.300153 科泰电源 → 使用高澜股份(300499)模型
-    {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300499.zip'},  # 🔵 稳健型：高澜股份(300499)模型
-    # 15  sz.300762 上海瀚讯 → 使用自身模型
-    {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip'},  # 🟢 均衡型：自身模型
-    # 4   sz.301005 超捷股份 → 使用中国高科(600730)模型
-    {'code': 'sz.301005', 'name': '超捷股份', 'model': 'ppo_stock_v7_600730.zip'},  # 🟡 进取型：中国高科(600730)模型
-    # 5   sh.603698 航天工程 → 使用自身模型
-    {'code': 'sh.603698', 'name': '航天工程', 'model': 'ppo_stock_v7_603698.zip'},  # 🟢 均衡型：自身模型
-    # 16  sz.300726 宏达电子 → 使用自身模型
-    {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip'},  # 🟢 均衡型：自身模型
-    # 17  sz.002025 航天电器 → 使用航天工程(603698)模型
-    {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7_603698.zip'},  # 🟢 均衡型：航天工程(603698)模型
-    # 18  sz.002837 英维克 → 使用自身模型
-    {'code': 'sz.002837', 'name': '英维克', 'model': 'ppo_stock_v7_002837.zip'},  # 🔴 高风险：自身模型
-    # 19  sh.600730 中国高科 → 使用自身模型
-    {'code': 'sh.600730', 'name': '中国高科', 'model': 'ppo_stock_v7_600730.zip'},  # 🟡 进取型：自身模型
-    # 20  sz.002364 中恒电气 → 使用自身模型
-    {'code': 'sz.002364', 'name': '中恒电气', 'model': 'ppo_stock_v7_002364.zip'},  # 🔴 高风险：自身模型
-    # 22  sz.002518 科士达 → 使用科华数据(002335)模型
-    {'code': 'sz.002518', 'name': '科士达', 'model': 'ppo_stock_v7_002335.zip'},  # 🔴 高风险：科华数据(002335)模型
-    # 7   sz.300274 阳光电源 → 使用麦格米特(002851)模型
-    {'code': 'sz.300274', 'name': '阳光电源', 'model': 'ppo_stock_v7_002851.zip'},  # 🟢 均衡型：麦格米特(002851)模型
-    # 21  sh.601399 国机重装 → 使用自身模型
-    {'code': 'sh.601399', 'name': '国机重装', 'model': 'ppo_stock_v7_601399.zip'},  # 🟢 均衡型：自身模型
-    # 14  sz.301389 隆扬电子 → 使用自身模型
-    {'code': 'sz.301389', 'name': '隆扬电子', 'model': 'ppo_stock_v7_301389.zip'},  # 🔴 高风险：自身模型
+    {'code': 'sz.002706', 'name': '良信股份', 'model': 'ppo_stock_v7_002837.zip', 'rank': 1, 'sharpe': 3.25, 'return': 70.38, 'drawdown': 3.92, 'strategy': '🔵 稳健型'},  # 排名1：夏普3.25，收益率+70.38%，回撤3.92%
+    # 2   sz.300811 铂科新材 → 使用V16_300811特色模型
+    {'code': 'sz.300811', 'name': '铂科新材', 'model': 'ppo_stock_v7_300811.zip', 'rank': 2, 'sharpe': 2.61, 'return': 51.14, 'drawdown': 6.40, 'strategy': '🔵 稳健型'},  # 排名2：V16特色模型，夏普2.61，收益率+51.14%，回撤6.40%
+    # 3   sh.688208 道通科技 → 使用道通转债(118013)模型
+    {'code': 'sh.688208', 'name': '道通科技', 'model': 'ppo_stock_v7_118013.zip', 'rank': 3, 'sharpe': 2.87, 'return': 33.70, 'drawdown': 2.42, 'strategy': '🔵 稳健型'},  # 排名3：夏普2.87，收益率+33.70%，回撤2.42%
+    # 4   sz.002241 歌尔股份 → 使用圣邦股份(300661)模型
+    {'code': 'sz.002241', 'name': '歌尔股份', 'model': 'ppo_stock_v7_300661.zip', 'rank': 4, 'sharpe': 2.51, 'return': 66.15, 'drawdown': 9.38, 'strategy': '🟢 均衡型'},  # 排名4：夏普2.51，收益率+66.15%，回撤9.38%
+    # 5   sz.002475 立讯精密 → 使用隆扬电子(301389)模型
+    {'code': 'sz.002475', 'name': '立讯精密', 'model': 'ppo_stock_v7_301389.zip', 'rank': 5, 'sharpe': 2.43, 'return': 68.03, 'drawdown': 10.64, 'strategy': '🟢 均衡型'},  # 排名5：夏普2.43，收益率+68.03%，回撤10.64%
+    # 6   sz.300274 阳光电源 → 使用麦格米特(002851)模型
+    {'code': 'sz.300274', 'name': '阳光电源', 'model': 'ppo_stock_v7_002851.zip', 'rank': 6, 'sharpe': 2.42, 'return': 71.18, 'drawdown': 9.42, 'strategy': '🟢 均衡型'},  # 排名6：夏普2.42，收益率+71.18%，回撤9.42%
+    # 7   sz.300499 高澜股份 → 使用自身模型
+    {'code': 'sz.300499', 'name': '高澜股份', 'model': 'ppo_stock_v7_300499.zip', 'rank': 7, 'sharpe': 2.41, 'return': 105.36, 'drawdown': 17.00, 'strategy': '🟡 进取型'},  # 排名7：夏普2.41，收益率+105.36%，回撤17.00%
+    # 8   sh.603267 鸿远电子 → 使用航天电器(002025)模型
+    {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_002025.zip', 'rank': 8, 'sharpe': 2.40, 'return': 33.96, 'drawdown': 3.17, 'strategy': '🔵 稳健型'},  # 排名8：夏普2.40，收益率+33.96%，回撤3.17%
+    # 9   sz.002335 科华数据 → 使用自身模型
+    {'code': 'sz.002335', 'name': '科华数据', 'model': 'ppo_stock_v7_002335.zip', 'rank': 9, 'sharpe': 2.28, 'return': 103.71, 'drawdown': 14.82, 'strategy': '🟡 进取型'},  # 排名9：夏普2.28，收益率+103.71%，回撤14.82%
+    # 10  sz.002851 麦格米特 → 使用自身模型
+    {'code': 'sz.002851', 'name': '麦格米特', 'model': 'ppo_stock_v7_002851.zip', 'rank': 10, 'sharpe': 2.20, 'return': 33.24, 'drawdown': 7.18, 'strategy': '🟢 均衡型'},  # 排名10：夏普2.20，收益率+33.24%，回撤7.18%
+    # 11  sh.118013 道通转债 → 使用自身模型
+    {'code': 'sh.118013', 'name': '道通转债', 'model': 'ppo_stock_v7_118013.zip', 'rank': 11, 'sharpe': 2.12, 'return': 33.41, 'drawdown': 7.41, 'strategy': '🟢 均衡型'},  # 排名11：夏普2.12，收益率+33.41%，回撤7.41%
+    # 12  sz.300153 科泰电源 → 使用高澜股份(300499)模型
+    {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300499.zip', 'rank': 12, 'sharpe': 2.08, 'return': 47.51, 'drawdown': 4.52, 'strategy': '🔵 稳健型'},  # 排名12：夏普2.08，收益率+47.51%，回撤4.52%
+    # 13  sz.301389 隆扬电子 → 使用自身模型
+    {'code': 'sz.301389', 'name': '隆扬电子', 'model': 'ppo_stock_v7_301389.zip', 'rank': 13, 'sharpe': 1.91, 'return': 130.63, 'drawdown': 45.41, 'strategy': '🔴 高风险'},  # 排名13：夏普1.91，收益率+130.63%，回撤45.41%
+    # 14  sz.300762 上海瀚讯 → 使用自身模型
+    {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip', 'rank': 14, 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},  # 排名14：夏普1.83，收益率+15.06%，回撤4.96%
+    # 15  sz.002025 航天电器 → 使用通用模型（原使用航天工程模型，现改为通用模型）
+    {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7.zip', 'rank': 15, 'sharpe': 1.75, 'return': 24.11, 'drawdown': 4.62, 'strategy': '🟢 均衡型'},  # 排名15：夏普1.75，收益率+24.11%，回撤4.62%
+    # 16  sz.002837 英维克 → 使用自身模型
+    {'code': 'sz.002837', 'name': '英维克', 'model': 'ppo_stock_v7_002837.zip', 'rank': 16, 'sharpe': 1.75, 'return': 62.26, 'drawdown': 24.74, 'strategy': '🔴 高风险'},  # 排名16：夏普1.75，收益率+62.26%，回撤24.74%
+    # 17  sz.300726 宏达电子 → 使用自身模型
+    {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip', 'rank': 17, 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},  # 排名17：夏普1.71，收益率+18.35%，回撤3.74%
+    # 18  sz.002364 中恒电气 → 使用自身模型
+    {'code': 'sz.002364', 'name': '中恒电气', 'model': 'ppo_stock_v7_002364.zip', 'rank': 18, 'sharpe': 1.39, 'return': 57.38, 'drawdown': 31.54, 'strategy': '🔴 高风险'},  # 排名18：夏普1.39，收益率+57.38%，回撤31.54%
+    # 19  sh.601012 隆基绿能 → 使用V11_601012特色模型
+    {'code': 'sh.601012', 'name': '隆基绿能', 'model': 'ppo_stock_v7_601012.zip', 'rank': 19, 'sharpe': 1.07, 'return': 12.19, 'drawdown': 7.77, 'strategy': '🟢 均衡型'},  # 排名19：V11特色模型，夏普1.07，收益率+12.19%，回撤7.77%
 ]
 
 # 当前处理的股票代码（会在循环中动态设置）
@@ -1375,6 +1371,16 @@ except ImportError:
     STOCKAPI_AVAILABLE = False
 CANDIDATE_MODELS = [  # 候选模型列表（包含所有股票的专用模型）
     {
+        'name': '300811模型',
+        'paths': ['ppo_stock_v7_300811.zip', 'models_v7_300811/best/best_model.zip'],
+        'description': '铂科新材300811专用模型 - ⭐ V16特色模型（夏普2.61，收益率+51.14%）'
+    },
+    {
+        'name': '601012模型',
+        'paths': ['ppo_stock_v7_601012.zip', 'models_v7_601012/best/best_model.zip'],
+        'description': '隆基绿能601012专用模型 - ⭐ V11特色模型（夏普1.07，收益率+12.19%）'
+    },
+    {
         'name': '002837模型',
         'paths': ['ppo_stock_v7_002837.zip', 'models_v7_002837/best/best_model.zip'],
         'description': '英维克002837专用模型 - 🏆 双料冠军'
@@ -1392,7 +1398,7 @@ CANDIDATE_MODELS = [  # 候选模型列表（包含所有股票的专用模型�
     {
         'name': '603698模型',
         'paths': ['ppo_stock_v7_603698.zip', 'models_v7_603698/best/best_model.zip'],
-        'description': '航天工程603698专用模型'
+        'description': '航天工程603698专用模型（模型保留，不进行预测）'
     },
     {
         'name': '002025模型',
@@ -1462,7 +1468,7 @@ CANDIDATE_MODELS = [  # 候选模型列表（包含所有股票的专用模型�
     {
         'name': '301005模型',
         'paths': ['ppo_stock_v7_301005.zip', 'models_v7_301005/best/best_model.zip'],
-        'description': '超捷股份301005专用模型'
+        'description': '超捷股份301005专用模型（模型保留，不进行预测）'
     },
     {
         'name': '通用模型',
@@ -4565,30 +4571,27 @@ print("=" * 120)
 print(f"{'排名':<6} | {'股票代码与名称':<20} | {'推荐的最优模型':<25} | {'夏普比率':<10} | {'总收益率':<12} | {'最大回撤':<12} | {'策略分类':<12}")
 print("-" * 120)
 
-# 最优模型列表数据
+# 最优模型列表数据（按排名顺序，包含所有24只股票）
 optimal_models_info = [
     {'rank': 1, 'code': 'sz.002706', 'name': '良信股份', 'model': '英维克(002837)模型', 'sharpe': 3.25, 'return': 70.38, 'drawdown': 3.92, 'strategy': '🔵 稳健型'},
-    {'rank': 2, 'code': 'sh.688208', 'name': '道通科技', 'model': '道通转债(118013)模型', 'sharpe': 2.87, 'return': 33.70, 'drawdown': 2.42, 'strategy': '🔵 稳健型'},
-    {'rank': 3, 'code': 'sz.002241', 'name': '歌尔股份', 'model': '圣邦股份(300661)模型', 'sharpe': 2.51, 'return': 66.15, 'drawdown': 9.38, 'strategy': '🔵 稳健型'},
-    {'rank': 4, 'code': 'sz.301005', 'name': '超捷股份', 'model': '中国高科(600730)模型', 'sharpe': 2.54, 'return': 248.88, 'drawdown': 27.24, 'strategy': '🟡 进取型'},
-    {'rank': 5, 'code': 'sh.603698', 'name': '航天工程', 'model': '航天工程(603698)模型', 'sharpe': 2.69, 'return': 52.81, 'drawdown': 8.38, 'strategy': '🟢 均衡型'},
-    {'rank': 6, 'code': 'sz.002475', 'name': '立讯精密', 'model': '隆扬电子(301389)模型', 'sharpe': 2.43, 'return': 68.03, 'drawdown': 10.64, 'strategy': '🟢 均衡型'},
-    {'rank': 7, 'code': 'sz.300274', 'name': '阳光电源', 'model': '麦格米特(002851)模型', 'sharpe': 2.42, 'return': 71.18, 'drawdown': 9.42, 'strategy': '🟢 均衡型'},
-    {'rank': 8, 'code': 'sz.300499', 'name': '高澜股份', 'model': '高澜股份(300499)模型', 'sharpe': 2.41, 'return': 105.36, 'drawdown': 17.00, 'strategy': '🟡 进取型'},
-    {'rank': 9, 'code': 'sh.603267', 'name': '鸿远电子', 'model': '航天电器(002025)模型', 'sharpe': 2.40, 'return': 33.96, 'drawdown': 3.17, 'strategy': '🔵 稳健型'},
-    {'rank': 10, 'code': 'sz.002335', 'name': '科华数据', 'model': '科华数据(002335)模型', 'sharpe': 2.28, 'return': 103.71, 'drawdown': 14.82, 'strategy': '🟡 进取型'},
-    {'rank': 11, 'code': 'sz.002851', 'name': '麦格米特', 'model': '麦格米特(002851)模型', 'sharpe': 2.20, 'return': 33.24, 'drawdown': 7.18, 'strategy': '🟢 均衡型'},
-    {'rank': 12, 'code': 'sh.118013', 'name': '道通转债', 'model': '道通转债(118013)模型', 'sharpe': 2.12, 'return': 33.41, 'drawdown': 7.41, 'strategy': '🟢 均衡型'},
-    {'rank': 13, 'code': 'sz.300153', 'name': '科泰电源', 'model': '高澜股份(300499)模型', 'sharpe': 2.08, 'return': 47.51, 'drawdown': 4.52, 'strategy': '🔵 稳健型'},
-    {'rank': 14, 'code': 'sz.301389', 'name': '隆扬电子', 'model': '隆扬电子(301389)模型', 'sharpe': 1.91, 'return': 130.63, 'drawdown': 45.41, 'strategy': '🔴 高风险'},
-    {'rank': 15, 'code': 'sz.300762', 'name': '上海瀚讯', 'model': '上海瀚讯(300762)模型', 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},
-    {'rank': 16, 'code': 'sz.300726', 'name': '宏达电子', 'model': '宏达电子(300726)模型', 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},
-    {'rank': 17, 'code': 'sz.002025', 'name': '航天电器', 'model': '航天工程(603698)模型', 'sharpe': 1.75, 'return': 24.11, 'drawdown': 4.62, 'strategy': '🟢 均衡型'},
-    {'rank': 18, 'code': 'sz.002837', 'name': '英维克', 'model': '英维克(002837)模型', 'sharpe': 1.75, 'return': 62.26, 'drawdown': 24.74, 'strategy': '🔴 高风险'},
-    {'rank': 19, 'code': 'sh.600730', 'name': '中国高科', 'model': '中国高科(600730)模型', 'sharpe': 1.64, 'return': 54.65, 'drawdown': 17.39, 'strategy': '🟡 进取型'},
-    {'rank': 20, 'code': 'sz.002364', 'name': '中恒电气', 'model': '中恒电气(002364)模型', 'sharpe': 1.39, 'return': 57.38, 'drawdown': 31.54, 'strategy': '🔴 高风险'},
-    {'rank': 21, 'code': 'sh.601399', 'name': '国机重装', 'model': '国机重装(601399)模型', 'sharpe': 1.32, 'return': 31.37, 'drawdown': 14.69, 'strategy': '🟢 均衡型'},
-    {'rank': 22, 'code': 'sz.002518', 'name': '科士达', 'model': '科华数据(002335)模型', 'sharpe': 1.31, 'return': 40.63, 'drawdown': 28.34, 'strategy': '🔴 高风险'},
+    {'rank': 2, 'code': 'sz.300811', 'name': '铂科新材', 'model': 'V16_300811特色模型', 'sharpe': 2.61, 'return': 51.14, 'drawdown': 6.40, 'strategy': '🔵 稳健型'},
+    {'rank': 3, 'code': 'sh.688208', 'name': '道通科技', 'model': '道通转债(118013)模型', 'sharpe': 2.87, 'return': 33.70, 'drawdown': 2.42, 'strategy': '🔵 稳健型'},
+    {'rank': 4, 'code': 'sz.002241', 'name': '歌尔股份', 'model': '圣邦股份(300661)模型', 'sharpe': 2.51, 'return': 66.15, 'drawdown': 9.38, 'strategy': '🟢 均衡型'},
+    {'rank': 5, 'code': 'sz.002475', 'name': '立讯精密', 'model': '隆扬电子(301389)模型', 'sharpe': 2.43, 'return': 68.03, 'drawdown': 10.64, 'strategy': '🟢 均衡型'},
+    {'rank': 6, 'code': 'sz.300274', 'name': '阳光电源', 'model': '麦格米特(002851)模型', 'sharpe': 2.42, 'return': 71.18, 'drawdown': 9.42, 'strategy': '🟢 均衡型'},
+    {'rank': 7, 'code': 'sz.300499', 'name': '高澜股份', 'model': '高澜股份(300499)模型', 'sharpe': 2.41, 'return': 105.36, 'drawdown': 17.00, 'strategy': '🟡 进取型'},
+    {'rank': 8, 'code': 'sh.603267', 'name': '鸿远电子', 'model': '航天电器(002025)模型', 'sharpe': 2.40, 'return': 33.96, 'drawdown': 3.17, 'strategy': '🔵 稳健型'},
+    {'rank': 9, 'code': 'sz.002335', 'name': '科华数据', 'model': '科华数据(002335)模型', 'sharpe': 2.28, 'return': 103.71, 'drawdown': 14.82, 'strategy': '🟡 进取型'},
+    {'rank': 10, 'code': 'sz.002851', 'name': '麦格米特', 'model': '麦格米特(002851)模型', 'sharpe': 2.20, 'return': 33.24, 'drawdown': 7.18, 'strategy': '🟢 均衡型'},
+    {'rank': 11, 'code': 'sh.118013', 'name': '道通转债', 'model': '道通转债(118013)模型', 'sharpe': 2.12, 'return': 33.41, 'drawdown': 7.41, 'strategy': '🟢 均衡型'},
+    {'rank': 12, 'code': 'sz.300153', 'name': '科泰电源', 'model': '高澜股份(300499)模型', 'sharpe': 2.08, 'return': 47.51, 'drawdown': 4.52, 'strategy': '🔵 稳健型'},
+    {'rank': 13, 'code': 'sz.301389', 'name': '隆扬电子', 'model': '隆扬电子(301389)模型', 'sharpe': 1.91, 'return': 130.63, 'drawdown': 45.41, 'strategy': '🔴 高风险'},
+    {'rank': 14, 'code': 'sz.300762', 'name': '上海瀚讯', 'model': '上海瀚讯(300762)模型', 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},
+    {'rank': 15, 'code': 'sz.002025', 'name': '航天电器', 'model': '通用模型', 'sharpe': 1.75, 'return': 24.11, 'drawdown': 4.62, 'strategy': '🟢 均衡型'},
+    {'rank': 16, 'code': 'sz.002837', 'name': '英维克', 'model': '英维克(002837)模型', 'sharpe': 1.75, 'return': 62.26, 'drawdown': 24.74, 'strategy': '🔴 高风险'},
+    {'rank': 17, 'code': 'sz.300726', 'name': '宏达电子', 'model': '宏达电子(300726)模型', 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},
+    {'rank': 18, 'code': 'sz.002364', 'name': '中恒电气', 'model': '中恒电气(002364)模型', 'sharpe': 1.39, 'return': 57.38, 'drawdown': 31.54, 'strategy': '🔴 高风险'},
+    {'rank': 19, 'code': 'sh.601012', 'name': '隆基绿能', 'model': 'V11_601012特色模型', 'sharpe': 1.07, 'return': 12.19, 'drawdown': 7.77, 'strategy': '🟢 均衡型'},
 ]
 
 for info in optimal_models_info:
@@ -4598,9 +4601,16 @@ for info in optimal_models_info:
 print("-" * 120)
 print("=" * 120 + "\n")
 
-print(f"📋 股票列表:")
-for i, stock in enumerate(STOCK_LIST, 1):
-    print(f"   {i}. {stock['name']}({stock['code']})")
+print(f"📋 股票列表（按排名顺序，共{len(STOCK_LIST)}只）:")
+for stock in STOCK_LIST:
+    rank = stock.get('rank', 0)
+    name = stock['name']
+    code = stock['code']
+    sharpe = stock.get('sharpe', 0)
+    return_pct = stock.get('return', 0)
+    drawdown = stock.get('drawdown', 0)
+    strategy = stock.get('strategy', '')
+    print(f"   排名{rank:2d}: {name}({code}) | 夏普{sharpe:.2f} | 收益{return_pct:+.2f}% | 回撤{drawdown:.2f}% | {strategy}")
 print("⚠️  重要提示: 这是 V16 批量预测版本，每个股票只运行一次预测！")
 if ENABLE_AUTO_MODEL_SELECTION:
     print(f"   📊 已启用自动模型选择，候选模型数量: {len(candidate_ppo_models)}")
@@ -4706,9 +4716,16 @@ with open(log_file, 'w', encoding='utf-8') as f:
     f.write("-" * 120 + "\n")
     f.write("=" * 120 + "\n\n")
     
-    f.write(f"股票列表:\n")
-    for i, stock in enumerate(STOCK_LIST, 1):
-        f.write(f"   {i}. {stock['name']}({stock['code']})\n")
+    f.write(f"股票列表（按排名顺序，共{len(STOCK_LIST)}只）:\n")
+    for stock in STOCK_LIST:
+        rank = stock.get('rank', 0)
+        name = stock['name']
+        code = stock['code']
+        sharpe = stock.get('sharpe', 0)
+        return_pct = stock.get('return', 0)
+        drawdown = stock.get('drawdown', 0)
+        strategy = stock.get('strategy', '')
+        f.write(f"   排名{rank:2d}: {name}({code}) | 夏普{sharpe:.2f} | 收益{return_pct:+.2f}% | 回撤{drawdown:.2f}% | {strategy}\n")
     f.write("=" * 70 + "\n\n")
 
 # 批量预测：对每个股票执行一次预测
@@ -5756,7 +5773,7 @@ try:
                     price_diff_from_closest = abs(current_price - closest_price)
                     price_diff_pct_from_closest = (price_diff_from_closest / current_price * 100) if current_price > 0 else 0
                     
-                    # 检查预测涨幅，如果是2%、3%或大于3%，添加重点标注
+                    # 检查预测涨幅，如果是2%以上、3%以上或大于3%，添加重点标注
                     # 注意：price_suggestions['price_change_pct']是根据PPO动作调整后的值
                     # 如果PPO是买入倾向且预测下跌，会降低看跌幅度（乘以0.5），以反映PPO买入信号对预测的修正
                     # 这与上方"预测价格"中显示的原始预测跌幅不同，但预测价格金额一致
@@ -5764,12 +5781,10 @@ try:
                     abs_adjusted_price_change = abs(adjusted_price_change_pct)
                     highlight_marker = ""
                     if price_suggestions['direction'] == '上涨':
-                        if abs(abs_adjusted_price_change - 2.0) < 0.1:  # 预测上涨约2%
-                            highlight_marker = " 🔥【重点标注：预测上涨2%】"
-                        elif abs(abs_adjusted_price_change - 3.0) < 0.1:  # 预测上涨约3%
-                            highlight_marker = " 🔥【重点标注：预测上涨3%】"
-                        elif abs_adjusted_price_change > 3.0:  # 预测上涨大于3%
-                            highlight_marker = f" 🔥【重点标注：预测上涨{abs_adjusted_price_change:.2f}%（大于3%）】"
+                        if abs_adjusted_price_change >= 3.0:  # 预测上涨大于等于3%
+                            highlight_marker = f" 🔥【重点标注：预测上涨{abs_adjusted_price_change:.2f}%（大于等于3%）】"
+                        elif abs_adjusted_price_change >= 2.0:  # 预测上涨大于等于2%
+                            highlight_marker = f" 🔥【重点标注：预测上涨{abs_adjusted_price_change:.2f}%（大于等于2%）】"
                     
                     print(f"\n   💡 仓位价格建议（基于预测价格 {price_suggestions['predicted_price']:.2f}元，预测{price_suggestions['direction']} {abs_adjusted_price_change:.2f}%，已根据PPO动作调整）{highlight_marker}:")
                     print(f"      🟢 100%仓位: {suggestions['100%']:.2f}元 (价格越低，买入越多)")
@@ -6572,17 +6587,15 @@ try:
                 if save_batch_predict_result(STOCK_CODE, stock_name, prediction_data):
                     print(f"   ✅ 预测结果已保存到: {get_batch_predict_result_file()}")
                 
-                # 检查预测涨幅，如果是2%、3%或大于3%，在汇总处添加重点标注
+                # 检查预测涨幅，如果是2%以上、3%以上或大于3%，在汇总处添加重点标注
                 predicted_change_pct = prediction_data.get('predicted_change_pct')
                 predicted_direction = prediction_data.get('predicted_direction')
                 if predicted_change_pct is not None and predicted_direction == '上涨':
                     abs_change = abs(predicted_change_pct)
-                    if abs(abs_change - 2.0) < 0.1:  # 预测上涨约2%
-                        print(f"\n   🔥【重点标注】{stock_name}({STOCK_CODE}) 预测上涨2%，建议重点关注！")
-                    elif abs(abs_change - 3.0) < 0.1:  # 预测上涨约3%
-                        print(f"\n   🔥【重点标注】{stock_name}({STOCK_CODE}) 预测上涨3%，建议重点关注！")
-                    elif abs_change > 3.0:  # 预测上涨大于3%
-                        print(f"\n   🔥【重点标注】{stock_name}({STOCK_CODE}) 预测上涨{abs_change:.2f}%（大于3%），强烈建议重点关注！")
+                    if abs_change >= 3.0:  # 预测上涨大于等于3%
+                        print(f"\n   🔥【重点标注】{stock_name}({STOCK_CODE}) 预测上涨{abs_change:.2f}%（大于等于3%），强烈建议重点关注！")
+                    elif abs_change >= 2.0:  # 预测上涨大于等于2%
+                        print(f"\n   🔥【重点标注】{stock_name}({STOCK_CODE}) 预测上涨{abs_change:.2f}%（大于等于2%），建议重点关注！")
             except Exception as e:
                 print(f"   ⚠️  保存预测结果失败: {e}")
                 import traceback

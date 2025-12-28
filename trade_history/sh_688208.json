@@ -16,5 +16,14 @@
     "confidence": 0.5,
     "operation": "买入 100%",
     "timestamp": "2025-12-25 17:23:43"
+  },
+  {
+    "action": "buy",
+    "price": 35.77,
+    "date": "2025-12-26",
+    "predicted_return_pct": 0.5830868016350322,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2025-12-28 17:21:53"
   }
 ]
