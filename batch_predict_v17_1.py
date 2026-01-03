@@ -268,7 +268,16 @@ def convert_stock_code(code):
             }
 
 def get_stock_name(code):
-    """根据股票代码获取股票名称"""
+    """根据股票代码获取股票名称
+    优先从STOCK_LIST中查找，如果找不到，再从映射表中查找
+    """
+    # 优先从STOCK_LIST中查找（包含所有新增股票）
+    if 'STOCK_LIST' in globals():
+        for stock in STOCK_LIST:
+            if stock.get('code') == code:
+                return stock.get('name', code)
+    
+    # 如果STOCK_LIST中没有，使用映射表
     stock_name_map = {
         'sh.000001': '上证指数',
         'sh.603267': '鸿远电子',
@@ -298,6 +307,14 @@ def get_stock_name(code):
         'sz.301389': '隆扬电子',
         'sz.300811': '铂科新材',
         'sh.601012': '隆基绿能',
+        # 新增股票名称映射
+        'sh.600105': '永鼎股份',
+        'sz.000777': '中核科技',
+        'sh.600118': '中国卫星',
+        'sz.300007': '汉威科技',
+        'sz.003021': '兆威机电',
+        'sh.603278': '大业股份',
+        'sz.301413': '安培龙',
     }
     return stock_name_map.get(code, code)  # 如果找不到，返回代码本身
 
@@ -758,11 +775,20 @@ STOCK_METRICS_DATA = {
     'sz.300726': {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None},  # 宏达电子
     'sz.301017': {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None},  # 漱玉平民
     'sz.300749': {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None},  # 顶固集创
+    # 新增股票指标数据
+    'sh.600105': {'total_return': 212.84, 'max_drawdown': 29.50, 'sharpe_ratio': 2.44},  # 永鼎股份 - 收益冠军，V7夏普更优，但波动大
+    'sz.000777': {'total_return': 38.03, 'max_drawdown': 8.28, 'sharpe_ratio': 2.22},  # 中核科技 - 黄金组合：高夏普、低回撤、收益稳
+    'sh.600118': {'total_return': 52.35, 'max_drawdown': 14.96, 'sharpe_ratio': 1.73},  # 中国卫星 - 表现均衡，V7各项指标全面超越V6
+    'sz.300007': {'total_return': 76.72, 'max_drawdown': 24.77, 'sharpe_ratio': 1.72},  # 汉威科技 - 模型本源，V7收益与风控远胜V6
+    'sz.003021': {'total_return': 27.12, 'max_drawdown': 7.43, 'sharpe_ratio': 1.63},  # 兆威机电 - V7夏普和收益均优于V6
+    'sh.603278': {'total_return': 24.28, 'max_drawdown': 7.55, 'sharpe_ratio': 1.47},  # 大业股份 - 收益较低，但V7风控指标更佳
+    'sz.301413': {'total_return': 28.87, 'max_drawdown': 19.93, 'sharpe_ratio': 1.21},  # 安培龙 - 特例：同名模型在其自身上稍占优
 }
 
 def get_stock_metrics_from_config(stock_code):
     """
     从配置中获取股票的收益率和回撤数据
+    优先从STOCK_LIST中获取，如果STOCK_LIST中没有，则从STOCK_METRICS_DATA中获取
     
     Args:
         stock_code: 股票代码（如"sh.603267"）
@@ -770,6 +796,16 @@ def get_stock_metrics_from_config(stock_code):
     Returns:
         dict: 包含total_return、max_drawdown和sharpe_ratio的字典
     """
+    # 优先从STOCK_LIST中查找
+    for stock in STOCK_LIST:
+        if stock.get('code') == stock_code:
+            return {
+                'total_return': stock.get('return'),
+                'max_drawdown': stock.get('drawdown'),
+                'sharpe_ratio': stock.get('sharpe')
+            }
+    
+    # 如果STOCK_LIST中没有，则从STOCK_METRICS_DATA中获取
     return STOCK_METRICS_DATA.get(stock_code, {'total_return': None, 'max_drawdown': None, 'sharpe_ratio': None})
 
 def get_nasdaq_history_data(days=252):
@@ -1389,21 +1425,37 @@ STOCK_LIST = [
     {'code': 'sh.118013', 'name': '道通转债', 'model': 'ppo_stock_v7_118013.zip', 'rank': 11, 'sharpe': 2.12, 'return': 33.41, 'drawdown': 7.41, 'strategy': '🟢 均衡型'},  # 排名11：夏普2.12，收益率+33.41%，回撤7.41%
     # 12  sz.300153 科泰电源 → 使用高澜股份(300499)模型
     {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300499.zip', 'rank': 12, 'sharpe': 2.08, 'return': 47.51, 'drawdown': 4.52, 'strategy': '🔵 稳健型'},  # 排名12：夏普2.08，收益率+47.51%，回撤4.52%
-    # 13  sz.301389 隆扬电子 → 使用自身模型
-    {'code': 'sz.301389', 'name': '隆扬电子', 'model': 'ppo_stock_v7_301389.zip', 'rank': 13, 'sharpe': 1.91, 'return': 130.63, 'drawdown': 45.41, 'strategy': '🔴 高风险'},  # 排名13：夏普1.91，收益率+130.63%，回撤45.41%
     # 14  sz.300762 上海瀚讯 → 使用自身模型
     {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip', 'rank': 14, 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},  # 排名14：夏普1.83，收益率+15.06%，回撤4.96%
     # 15  sz.002025 航天电器 → 使用通用模型（原使用航天工程模型，现改为通用模型）
     {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7.zip', 'rank': 15, 'sharpe': 1.75, 'return': 24.11, 'drawdown': 4.62, 'strategy': '🟢 均衡型'},  # 排名15：夏普1.75，收益率+24.11%，回撤4.62%
-    # 16  sz.002837 英维克 → 使用自身模型
-    {'code': 'sz.002837', 'name': '英维克', 'model': 'ppo_stock_v7_002837.zip', 'rank': 16, 'sharpe': 1.75, 'return': 62.26, 'drawdown': 24.74, 'strategy': '🔴 高风险'},  # 排名16：夏普1.75，收益率+62.26%，回撤24.74%
     # 17  sz.300726 宏达电子 → 使用自身模型
     {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip', 'rank': 17, 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},  # 排名17：夏普1.71，收益率+18.35%，回撤3.74%
-    # 18  sz.002364 中恒电气 → 使用自身模型
-    {'code': 'sz.002364', 'name': '中恒电气', 'model': 'ppo_stock_v7_002364.zip', 'rank': 18, 'sharpe': 1.39, 'return': 57.38, 'drawdown': 31.54, 'strategy': '🔴 高风险'},  # 排名18：夏普1.39，收益率+57.38%，回撤31.54%
     # 19  sh.601012 隆基绿能 → 使用V11_601012特色模型
     {'code': 'sh.601012', 'name': '隆基绿能', 'model': 'ppo_stock_v7_601012.zip', 'rank': 19, 'sharpe': 1.07, 'return': 12.19, 'drawdown': 7.77, 'strategy': '🟢 均衡型'},  # 排名19：V11特色模型，夏普1.07，收益率+12.19%，回撤7.77%
+    # 20  sh.600105 永鼎股份 → 使用V7（汉威模型）
+    {'code': 'sh.600105', 'name': '永鼎股份', 'model': 'ppo_stock_v7_300007.zip', 'rank': 20, 'sharpe': 2.44, 'return': 212.84, 'drawdown': 29.50, 'strategy': '🟡 进取型'},  # 排名20：收益冠军，V7夏普更优，但波动大，夏普2.44，收益率+212.84%，回撤29.50%
+    # 21  sz.000777 中核科技 → 使用V7（汉威模型）
+    {'code': 'sz.000777', 'name': '中核科技', 'model': 'ppo_stock_v7_300007.zip', 'rank': 21, 'sharpe': 2.22, 'return': 38.03, 'drawdown': 8.28, 'strategy': '🔵 稳健型'},  # 排名21：黄金组合：高夏普、低回撤、收益稳，夏普2.22，收益率+38.03%，回撤8.28%
+    # 22  sh.600118 中国卫星 → 使用V7（汉威模型）
+    {'code': 'sh.600118', 'name': '中国卫星', 'model': 'ppo_stock_v7_300007.zip', 'rank': 22, 'sharpe': 1.73, 'return': 52.35, 'drawdown': 14.96, 'strategy': '🟢 均衡型'},  # 排名22：表现均衡，V7各项指标全面超越V6，夏普1.73，收益率+52.35%，回撤14.96%
+    # 23  sz.300007 汉威科技 → 使用V7（汉威模型）
+    {'code': 'sz.300007', 'name': '汉威科技', 'model': 'ppo_stock_v7_300007.zip', 'rank': 23, 'sharpe': 1.72, 'return': 76.72, 'drawdown': 24.77, 'strategy': '🟡 进取型'},  # 排名23：模型本源，V7收益与风控远胜V6，夏普1.72，收益率+76.72%，回撤24.77%
+    # 24  sz.003021 兆威机电 → 使用V7（汉威模型）
+    {'code': 'sz.003021', 'name': '兆威机电', 'model': 'ppo_stock_v7_300007.zip', 'rank': 24, 'sharpe': 1.63, 'return': 27.12, 'drawdown': 7.43, 'strategy': '🟢 均衡型'},  # 排名24：V7夏普和收益均优于V6，夏普1.63，收益率+27.12%，回撤7.43%
+    # 25  sh.603278 大业股份 → 使用V7（汉威模型）
+    {'code': 'sh.603278', 'name': '大业股份', 'model': 'ppo_stock_v7_300007.zip', 'rank': 25, 'sharpe': 1.47, 'return': 24.28, 'drawdown': 7.55, 'strategy': '🟢 均衡型'},  # 排名25：收益较低，但V7风控指标更佳，夏普1.47，收益率+24.28%，回撤7.55%
+    # 26  sz.301413 安培龙 → 使用V6（安培龙模型）
+    {'code': 'sz.301413', 'name': '安培龙', 'model': 'ppo_stock_v7_301413.zip', 'rank': 26, 'sharpe': 1.21, 'return': 28.87, 'drawdown': 19.93, 'strategy': '🟡 进取型'},  # 排名26：特例：同名模型在其自身上稍占优，夏普1.21，收益率+28.87%，回撤19.93%
 ]
+
+# ==================== 按夏普比率排序股票列表 ====================
+# 按照夏普比率从高到低排序，并重新分配排名
+# 注意：如果股票没有夏普比率（sharpe为None或0），则排在最后
+STOCK_LIST = sorted(STOCK_LIST, key=lambda x: x.get('sharpe') if x.get('sharpe') is not None and x.get('sharpe') > 0 else -999, reverse=True)
+# 重新分配排名（从0开始）
+for idx, stock in enumerate(STOCK_LIST):
+    stock['rank'] = idx
 
 # 当前处理的股票代码（会在循环中动态设置）
 STOCK_CODE = None
@@ -1646,6 +1698,13 @@ VISUALIZATION_PORT = 8082  # V11使用8082端口
 VISUALIZATION_OUTPUT_DIR = "visualization_output"
 
 HOLOGRAPHIC_MEMORY_SIZE = 1000
+
+# V17长期预测平滑配置
+# 用于存储每个股票的长期预测历史（用于平滑处理）
+LONG_TERM_PREDICTION_HISTORY = {}  # {stock_code: [prediction1, prediction2, ...]}
+LONG_TERM_PREDICTION_SMOOTH_WINDOW = 5  # 使用最近5次预测进行平滑
+LONG_TERM_PREDICTION_CHANGE_THRESHOLD = 0.15  # 长期预测变化阈值（15%），超过此阈值才更新
+LONG_TERM_PREDICTION_SMOOTH_ALPHA = 0.3  # 指数平滑系数（0.3表示新预测权重30%，历史70%）
 
 # V11持仓编辑器配置
 ENABLE_WEB_EDITOR = True          # 是否启用网页持仓编辑
@@ -2430,16 +2489,19 @@ def get_current_market_price(stock_code, max_retries=1, debug=False):
             pass
         
         # 方法5：如果所有实时接口都失败，尝试从持仓状态文件中读取手动输入的价格
-        try:
-            state = load_portfolio_state()
-            if state and state.get('stock_code') == stock_code:
-                manual_price = state.get('last_price', 0.0)
-                if manual_price and manual_price > 0:
-                    if debug:
-                        print(f"[实时价格] ✅ 方法5成功: {manual_price:.2f} (来源: 持仓编辑器手动输入)")
-                    return manual_price
-        except Exception as e:
-            pass
+        # V17批量预测：跳过此方法，只使用实时行情，不从持仓编辑器获取价格
+        # 注意：V17批量预测统一使用实时行情，不读取持仓编辑器保存的价格
+        # if stock_code != 'sz.300726':
+        #     try:
+        #         state = load_portfolio_state()
+        #         if state and state.get('stock_code') == stock_code:
+        #             manual_price = state.get('last_price', 0.0)
+        #             if manual_price and manual_price > 0:
+        #                 if debug:
+        #                     print(f"[实时价格] ✅ 方法5成功: {manual_price:.2f} (来源: 持仓编辑器手动输入)")
+        #                 return manual_price
+        #     except Exception as e:
+        #         pass
                     
     except ImportError:
         if debug:
@@ -3600,15 +3662,16 @@ def calculate_position_price_suggestions(current_price, lstm_prediction=None, tr
     # 判断涨跌方向
     price_change_pct = (avg_prediction - current_price) / current_price * 100
     
-    # 根据PPO动作调整方向判断
-    if ppo_action is not None:
-        # PPO动作：0=全卖, 1=卖75%, 2=卖50%, 3=卖25%, 4=持有, 5=买25%, 6=全买
-        if ppo_action <= 3:  # 卖出倾向
-            if price_change_pct > 0:
-                price_change_pct *= 0.5  # 降低看涨幅度
-        elif ppo_action >= 5:  # 买入倾向
-            if price_change_pct < 0:
-                price_change_pct *= 0.5  # 降低看跌幅度
+    # V17批量预测：保持原始预测上涨下跌幅度，不除以2
+    # 根据PPO动作调整方向判断（仅用于价格区间偏移，不影响预测幅度）
+    # if ppo_action is not None:
+    #     # PPO动作：0=全卖, 1=卖75%, 2=卖50%, 3=卖25%, 4=持有, 5=买25%, 6=全买
+    #     if ppo_action <= 3:  # 卖出倾向
+    #         if price_change_pct > 0:
+    #             price_change_pct *= 0.5  # 降低看涨幅度
+    #     elif ppo_action >= 5:  # 买入倾向
+    #         if price_change_pct < 0:
+    #             price_change_pct *= 0.5  # 降低看跌幅度
     
     # 计算历史波动率（用于扩大价格区间）
     volatility_pct = 2.0  # 默认波动率2%
@@ -3785,7 +3848,7 @@ def calculate_position_price_suggestions(current_price, lstm_prediction=None, tr
     }
 
 def calculate_v17_explicit_price_suggestions(current_price, lstm_prediction=None, transformer_prediction=None, 
-                                            ppo_action=None, historical_prices=None):
+                                            ppo_action=None, historical_prices=None, stock_code=None):
     """
     V17新增：计算明确的买入和卖出价格建议（第二天和长期）
     
@@ -3795,6 +3858,7 @@ def calculate_v17_explicit_price_suggestions(current_price, lstm_prediction=None
         transformer_prediction: Transformer预测价格（第二天预测）
         ppo_action: PPO动作（0-6）
         historical_prices: 历史价格数组（用于计算长期预测）
+        stock_code: 股票代码（用于长期预测平滑处理）
     
     Returns:
         dict: 包含明确的买入价格、第二天卖出价格、长期卖出价格等信息
@@ -3814,7 +3878,8 @@ def calculate_v17_explicit_price_suggestions(current_price, lstm_prediction=None
         next_day_prediction = transformer_prediction
     
     # 计算长期预测价格（基于历史趋势和短期预测）
-    long_term_prediction = None
+    # V17改进：添加平滑机制，避免长期预测变化过快
+    long_term_prediction_raw = None
     long_term_days = None  # 记录长期预测的天数
     
     # 优先使用短期预测来估算长期趋势（更准确）
@@ -3830,48 +3895,95 @@ def calculate_v17_explicit_price_suggestions(current_price, lstm_prediction=None
                 returns = np.diff(recent_prices) / recent_prices[:-1]
                 avg_daily_return = np.mean(returns)
                 
-                # 结合短期预测和历史趋势（权重：短期60%，历史40%）
-                combined_daily_return = day_change_pct * 0.6 + avg_daily_return * 0.4
+                # 结合短期预测和历史趋势（权重：短期40%，历史60%，降低短期预测权重）
+                combined_daily_return = day_change_pct * 0.4 + avg_daily_return * 0.6
                 
                 # 长期预测（15个交易日后，约3周）
                 # 使用复合增长率，但考虑衰减（长期趋势会减弱）
-                long_term_prediction = current_price * (1 + combined_daily_return * 15)  # 15天，而不是20天，更保守
+                long_term_prediction_raw = current_price * (1 + combined_daily_return * 15)  # 15天，而不是20天，更保守
                 long_term_days = 15
             except:
-                # 如果历史计算失败，只使用短期预测
-                long_term_prediction = current_price * (1 + day_change_pct * 10 * 0.5)  # 衰减因子0.5，相当于5天
+                # 如果历史计算失败，只使用短期预测，但衰减更明显
+                long_term_prediction_raw = current_price * (1 + day_change_pct * 10 * 0.3)  # 衰减因子0.3，相当于3天
                 long_term_days = 5
         else:
-            # 没有足够历史数据，只使用短期预测
-            long_term_prediction = current_price * (1 + day_change_pct * 10 * 0.5)  # 衰减因子0.5，相当于5天
+            # 没有足够历史数据，只使用短期预测，但衰减更明显
+            long_term_prediction_raw = current_price * (1 + day_change_pct * 10 * 0.3)  # 衰减因子0.3，相当于3天
             long_term_days = 5
     
     # 如果没有短期预测，使用历史趋势
-    if long_term_prediction is None and historical_prices is not None and len(historical_prices) >= 30:
+    if long_term_prediction_raw is None and historical_prices is not None and len(historical_prices) >= 30:
         try:
             recent_prices = historical_prices[-30:]
             returns = np.diff(recent_prices) / recent_prices[:-1]
             avg_daily_return = np.mean(returns)
             # 长期预测（20个交易日后，约1个月）
-            long_term_prediction = current_price * (1 + avg_daily_return * 20)
+            long_term_prediction_raw = current_price * (1 + avg_daily_return * 20)
             long_term_days = 20
         except:
             pass
     
     # 如果长期预测与当前价格偏离过大，进行调整
-    if long_term_prediction is not None:
-        long_term_change_pct = (long_term_prediction - current_price) / current_price * 100
+    if long_term_prediction_raw is not None:
+        long_term_change_pct = (long_term_prediction_raw - current_price) / current_price * 100
         if abs(long_term_change_pct) > 30:  # 如果预测变化超过30%，进行限制
             # 限制在合理范围内（±25%）
             max_change = 0.25
             if long_term_change_pct > 0:
-                long_term_prediction = current_price * (1 + max_change)
+                long_term_prediction_raw = current_price * (1 + max_change)
             else:
-                long_term_prediction = current_price * (1 - max_change)
+                long_term_prediction_raw = current_price * (1 - max_change)
     
     # 如果还是没有长期预测，使用当前价格附近的合理范围
-    if long_term_prediction is None:
-        long_term_prediction = current_price * 1.08  # 默认假设8%涨幅（更乐观一些）
+    if long_term_prediction_raw is None:
+        long_term_prediction_raw = current_price * 1.08  # 默认假设8%涨幅（更乐观一些）
+    
+    # ========== V17改进：长期预测平滑处理 ==========
+    # 获取股票代码（优先使用函数参数，其次从全局变量）
+    stock_code_for_smooth = stock_code
+    if stock_code_for_smooth is None:
+        try:
+            # 尝试从全局变量获取当前股票代码
+            if 'STOCK_CODE' in globals() and globals()['STOCK_CODE']:
+                stock_code_for_smooth = globals()['STOCK_CODE']
+        except:
+            pass
+    
+    long_term_prediction = long_term_prediction_raw
+    
+    # 如果获取到股票代码，进行平滑处理
+    if stock_code_for_smooth and long_term_prediction_raw is not None:
+        # 获取该股票的历史长期预测
+        if stock_code_for_smooth not in LONG_TERM_PREDICTION_HISTORY:
+            LONG_TERM_PREDICTION_HISTORY[stock_code_for_smooth] = []
+        
+        history = LONG_TERM_PREDICTION_HISTORY[stock_code_for_smooth]
+        
+        # 计算新预测与历史平均的差异
+        if len(history) > 0:
+            # 使用最近N次预测的平均值作为历史基准
+            recent_history = history[-LONG_TERM_PREDICTION_SMOOTH_WINDOW:]
+            avg_history = np.mean(recent_history) if recent_history else long_term_prediction_raw
+            
+            # 计算变化幅度
+            change_pct = abs(long_term_prediction_raw - avg_history) / avg_history if avg_history > 0 else 0
+            
+            # 如果变化幅度超过阈值，使用指数平滑；否则使用历史平均值
+            if change_pct > LONG_TERM_PREDICTION_CHANGE_THRESHOLD:
+                # 变化较大，使用指数平滑（新预测权重30%，历史70%）
+                long_term_prediction = (LONG_TERM_PREDICTION_SMOOTH_ALPHA * long_term_prediction_raw + 
+                                      (1 - LONG_TERM_PREDICTION_SMOOTH_ALPHA) * avg_history)
+            else:
+                # 变化较小，更倾向于保持历史趋势（新预测权重10%，历史90%）
+                long_term_prediction = (0.1 * long_term_prediction_raw + 0.9 * avg_history)
+        else:
+            # 没有历史数据，直接使用新预测
+            long_term_prediction = long_term_prediction_raw
+        
+        # 更新历史记录（保留最近10次）
+        history.append(long_term_prediction)
+        if len(history) > 10:
+            history.pop(0)
     
     # 判断是否应该建议买入：如果预测第二天下跌或长期下跌，不建议买入
     should_suggest_buy = True
@@ -5098,12 +5210,9 @@ optimal_models_info = [
     {'rank': 10, 'code': 'sz.002851', 'name': '麦格米特', 'model': '麦格米特(002851)模型', 'sharpe': 2.20, 'return': 33.24, 'drawdown': 7.18, 'strategy': '🟢 均衡型'},
     {'rank': 11, 'code': 'sh.118013', 'name': '道通转债', 'model': '道通转债(118013)模型', 'sharpe': 2.12, 'return': 33.41, 'drawdown': 7.41, 'strategy': '🟢 均衡型'},
     {'rank': 12, 'code': 'sz.300153', 'name': '科泰电源', 'model': '高澜股份(300499)模型', 'sharpe': 2.08, 'return': 47.51, 'drawdown': 4.52, 'strategy': '🔵 稳健型'},
-    {'rank': 13, 'code': 'sz.301389', 'name': '隆扬电子', 'model': '隆扬电子(301389)模型', 'sharpe': 1.91, 'return': 130.63, 'drawdown': 45.41, 'strategy': '🔴 高风险'},
     {'rank': 14, 'code': 'sz.300762', 'name': '上海瀚讯', 'model': '上海瀚讯(300762)模型', 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},
     {'rank': 15, 'code': 'sz.002025', 'name': '航天电器', 'model': '通用模型', 'sharpe': 1.75, 'return': 24.11, 'drawdown': 4.62, 'strategy': '🟢 均衡型'},
-    {'rank': 16, 'code': 'sz.002837', 'name': '英维克', 'model': '英维克(002837)模型', 'sharpe': 1.75, 'return': 62.26, 'drawdown': 24.74, 'strategy': '🔴 高风险'},
     {'rank': 17, 'code': 'sz.300726', 'name': '宏达电子', 'model': '宏达电子(300726)模型', 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},
-    {'rank': 18, 'code': 'sz.002364', 'name': '中恒电气', 'model': '中恒电气(002364)模型', 'sharpe': 1.39, 'return': 57.38, 'drawdown': 31.54, 'strategy': '🔴 高风险'},
     {'rank': 19, 'code': 'sh.601012', 'name': '隆基绿能', 'model': 'V11_601012特色模型', 'sharpe': 1.07, 'return': 12.19, 'drawdown': 7.77, 'strategy': '🟢 均衡型'},
 ]
 
@@ -5114,11 +5223,12 @@ for info in optimal_models_info:
 print("-" * 120)
 print("=" * 120 + "\n")
 
-print(f"📋 股票列表（按排名顺序，共{len(STOCK_LIST)}只）:")
+print(f"📋 股票列表（按夏普比率从高到低排序，共{len(STOCK_LIST)}只）:")
 for stock in STOCK_LIST:
     rank = stock.get('rank', 0)
-    name = stock['name']
     code = stock['code']
+    # 优先使用STOCK_LIST中的name，如果为空或不存在，则使用get_stock_name函数获取
+    name = stock.get('name') or get_stock_name(code)
     sharpe = stock.get('sharpe', 0)
     return_pct = stock.get('return', 0)
     drawdown = stock.get('drawdown', 0)
@@ -5229,7 +5339,7 @@ with open(log_file, 'w', encoding='utf-8') as f:
     f.write("-" * 120 + "\n")
     f.write("=" * 120 + "\n\n")
     
-    f.write(f"股票列表（按排名顺序，共{len(STOCK_LIST)}只）:\n")
+    f.write(f"股票列表（按夏普比率从高到低排序，共{len(STOCK_LIST)}只）:\n")
     for stock in STOCK_LIST:
         rank = stock.get('rank', 0)
         name = stock['name']
@@ -5245,7 +5355,8 @@ with open(log_file, 'w', encoding='utf-8') as f:
 try:
     for stock_info in STOCK_LIST:
         STOCK_CODE = stock_info['code']
-        stock_name = stock_info['name']
+        # 优先使用STOCK_LIST中的name，如果为空或不存在，则使用get_stock_name函数获取
+        stock_name = stock_info.get('name') or get_stock_name(STOCK_CODE)
         
         # 为当前股票选择对应的模型
         stock_model = stock_info.get('model', None)
@@ -5537,17 +5648,9 @@ try:
                 # 备选方案：从数据源获取（可能是历史数据）
                 data_source_price = closes[-1]
                 
-                # 确定最终使用的价格：优先级 实时行情 > 持仓编辑器手动价格 > 数据源价格
-                # 先读取持仓编辑器中的价格，用于比较
-                manual_price = None
-                manual_price_time = None
-                try:
-                    state = load_portfolio_state()
-                    if state and state.get('stock_code') == STOCK_CODE:
-                        manual_price = state.get('last_price', 0.0)
-                        manual_price_time = state.get('price_update_time') or state.get('last_update', '')
-                except:
-                    pass
+                # 确定最终使用的价格：优先级 实时行情 > 数据源价格
+                # V17批量预测：只使用实时行情，不从持仓编辑器获取价格
+                # 注意：V17批量预测统一使用实时行情，跳过持仓编辑器手动价格
                 
                 # 检查实时价格的数据日期（如果是baostock，可能是昨天的数据）
                 realtime_price_is_today = True
@@ -5589,12 +5692,8 @@ try:
                             print(f"   ✅ 已同步实时价格到持仓编辑器: {realtime_price:.2f}")
                     except Exception as e:
                         print(f"   ⚠️  同步价格到持仓编辑器失败: {e}")
-                elif manual_price and manual_price > 0:
-                    # 如果实时价格不存在，使用持仓编辑器中的手动价格
-                    current_price = manual_price
-                    price_source = "持仓编辑器(手动输入)"
-                    print(f"   ✅ 使用持仓编辑器中的手动价格: {current_price:.2f}")
                 else:
+                    # 如果实时价格不存在，直接使用数据源价格（不从持仓编辑器获取）
                     current_price = data_source_price
                     price_source = "数据源(可能非最新)"
                     # 检查数据时间，如果数据太旧，给出警告
@@ -5984,7 +6083,7 @@ try:
                 # ========== V17: 明确买卖价格建议 ==========
                 # 先计算V17建议，但稍后打印（在所有其他输出之后）
                 v17_suggestions = calculate_v17_explicit_price_suggestions(
-                    current_price, lstm_prediction, transformer_prediction, ppo_action, closes
+                    current_price, lstm_prediction, transformer_prediction, ppo_action, closes, STOCK_CODE
                 )
                 
                 # ========== V10: 多模态处理 ==========
@@ -6854,28 +6953,17 @@ try:
                                         print(f"   📊 V13模型评估结果:")
                                         print(f"      🏆 最优模型: {best_model_name} (评分: {best_score:.4f})")
                                         print(f"      📈 回测指标 (样本数: {best_metrics['sample_count']}):")
-                                        print(f"         MAE: {best_metrics['mae']:.4f} | RMSE: {best_metrics['rmse']:.4f}")
-                                        print(f"         MAPE: {best_metrics['mape']:.2f}% | 方向准确率: {best_metrics['direction_accuracy']:.1f}%")
-                                        
-                                        # 显示所有模型的评分
-                                        if len(best_model_result['all_scores']) > 1:
-                                            print(f"      📋 所有模型评分:")
-                                            sorted_models = sorted(best_model_result['all_scores'].items(), key=lambda x: x[1], reverse=True)
-                                            for model_name, score in sorted_models:
-                                                marker = "🏆" if model_name == best_model_name else "  "
-                                                metrics = best_model_result['all_metrics'].get(model_name, {})
-                                                print(f"         {marker} {model_name}: {score:.4f} (MAE={metrics.get('mae', 0):.4f}, 方向准确率={metrics.get('direction_accuracy', 0):.1f}%)")
+                                        print(f"         MAE: {best_metrics['mae']:.4f} | 方向准确率: {best_metrics['direction_accuracy']:.1f}%")
                                         
                                         # 如果最优模型与当前模型不同，进行切换
                                         if best_model_name != current_model_name:
                                             old_model_name = current_model_name
                                             if switch_to_model(best_model_name):
                                                 print(f"   ✅ V13: 已切换到最优模型: {best_model_name} (原模型: {old_model_name})")
-                                                print(f"      💡 说明: 根据回测结果，{best_model_name} 表现最优，已自动切换")
                                             else:
                                                 print(f"   ⚠️  V13: 模型切换失败: {best_model_name}")
                                         else:
-                                            print(f"   ✅ V13: 当前模型 {current_model_name} 仍为最优，无需切换")
+                                            print(f"   ✅ V13: 当前模型 {current_model_name} 仍为最优")
                             else:
                                 print(f"   ⚠️  V13: 模型评估失败（数据不足或所有模型都无有效回测数据）")
                             

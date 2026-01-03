@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": 0.2,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.3,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.1,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "预计2026年初经济处于温和复苏通道，政策支持持续但效力边际递减，市场情绪谨慎乐观，地缘政治不确定性及与全球市场的高联动性构成主要风险。",
+  "date": "2026-01-01",
+  "source": "deepseek",
+  "timestamp": "2026-01-01T00:17:12.283984"
+}

@@ -21,9 +21,27 @@
     "action": "buy",
     "price": 26.92,
     "date": "2025-12-26",
-    "predicted_return_pct": 0.027742541296870035,
+    "predicted_return_pct": 0.09863181551711339,
     "confidence": 0.5,
     "operation": "未知动作",
-    "timestamp": "2025-12-28 18:24:27"
+    "timestamp": "2025-12-29 18:08:32"
+  },
+  {
+    "action": "hold",
+    "price": 26.39,
+    "date": "2025-12-29",
+    "predicted_return_pct": 1.0634594114498015,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2025-12-29 22:39:54"
+  },
+  {
+    "action": "hold",
+    "price": 26.4,
+    "date": "2025-12-30",
+    "predicted_return_pct": 0.18921128050848404,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2025-12-30 19:20:47"
   }
 ]

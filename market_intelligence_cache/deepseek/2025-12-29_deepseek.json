@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": 0.2,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.3,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.1,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "宏观经济处于温和复苏阶段，政策支持持续但效果有限；市场情绪谨慎乐观，但受地缘政治不确定性及国际金融市场波动影响，风险水平中等偏高，与全球市场联动性增强。",
+  "date": "2025-12-29",
+  "source": "deepseek",
+  "timestamp": "2025-12-29T16:56:29.756532"
+}

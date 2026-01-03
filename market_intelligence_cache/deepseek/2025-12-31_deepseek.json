@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": 0.2,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.3,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.1,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "预计2025年底中国经济处于温和复苏通道，政策托底但结构性挑战犹存，市场情绪谨慎乐观，外部环境波动与地缘风险构成主要不确定性。",
+  "date": "2025-12-31",
+  "source": "deepseek",
+  "timestamp": "2025-12-31T22:04:31.636619"
+}

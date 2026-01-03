@@ -21,9 +21,36 @@
     "action": "buy",
     "price": 10.46,
     "date": "2025-12-26",
-    "predicted_return_pct": -0.36813188807230307,
+    "predicted_return_pct": -0.9614305787970855,
     "confidence": 0.5,
     "operation": "买入 100%",
-    "timestamp": "2025-12-28 17:11:51"
+    "timestamp": "2025-12-29 20:30:09"
+  },
+  {
+    "action": "buy",
+    "price": 10.88,
+    "date": "2025-12-29",
+    "predicted_return_pct": -2.765956613417938,
+    "confidence": 0.5,
+    "operation": "买入 50%",
+    "timestamp": "2025-12-30 15:43:02"
+  },
+  {
+    "action": "buy",
+    "price": 10.66,
+    "date": "2025-12-30",
+    "predicted_return_pct": -2.0079551841259877,
+    "confidence": 0.65,
+    "operation": "买入 100%",
+    "timestamp": "2025-12-30 17:20:08"
+  },
+  {
+    "action": "buy",
+    "price": 10.78,
+    "date": "2025-12-31",
+    "predicted_return_pct": -1.0274355647072786,
+    "confidence": 0.5,
+    "operation": "买入 100%",
+    "timestamp": "2026-01-03 17:32:07"
   }
 ]

@@ -1,0 +1,26 @@
+[
+  {
+    "date": "2025-12-30",
+    "predicted_price": 15.633438643217087,
+    "current_price": 15.49,
+    "timestamp": "2025-12-30 19:11:08"
+  },
+  {
+    "date": "2026-01-01",
+    "predicted_price": 16.87269324754468,
+    "current_price": 17.04,
+    "timestamp": "2026-01-01 03:31:37"
+  },
+  {
+    "date": "2026-01-02",
+    "predicted_price": 16.8963941726624,
+    "current_price": 17.04,
+    "timestamp": "2026-01-02 01:11:10"
+  },
+  {
+    "date": "2026-01-03",
+    "predicted_price": 16.902695661535123,
+    "current_price": 17.04,
+    "timestamp": "2026-01-03 06:32:00"
+  }
+]
