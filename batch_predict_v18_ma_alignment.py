@@ -326,6 +326,23 @@ def get_stock_name(code):
         'sz.003021': '兆威机电',
         'sh.603278': '大业股份',
         'sz.301413': '安培龙',
+        # 新增股票名称映射（第二份榜单和本次新增）
+        'sz.000547': '航天发展',
+        'sh.600879': '航天电子',
+        'sz.300900': '广联航空',
+        'sz.002050': '三花智控',
+        'sz.000700': '模塑科技',
+        'sh.600363': '联创光电',
+        # 稀土/有色金属板块
+        'sh.600392': '盛和资源',
+        'sh.600111': '北方稀土',
+        'sh.603799': '华友钴业',
+        'sz.002738': '中矿资源',
+        'sh.603993': '洛阳钼业',
+        'sz.002460': '赣锋锂业',
+        'sz.000831': '中国稀土',
+        'sz.300748': '金力永磁',
+        'sz.002466': '天齐锂业',
     }
     return stock_name_map.get(code, code)  # 如果找不到，返回代码本身
 
@@ -1409,64 +1426,61 @@ def display_prediction_accuracy(stock_code):
 MODEL_PATH = "ppo_stock_v7_002025.zip"  # V12使用通用PPO模型，也可以使用专用模型
 
 # 批量预测：股票列表（按照最新V16最优模型映射表配置，按排名排序）
+# ==================== V18 最优模型配置列表 ====================
+# 说明：
+# 1. 列表会自动按夏普比率从高到低排序
+# 2. 排名会在排序后自动重新分配
+# 3. 每个股票配置包含：代码、名称、模型路径、夏普比率、总收益率、最大回撤、策略类型
+# 4. 模型选择原则：优先使用专用模型，其次使用同板块表现最优的模型
 STOCK_LIST = [
-    # 0   sh.000001 上证指数 → 使用自身模型（1A0001专用模型）
-    {'code': 'sh.000001', 'name': '上证指数', 'model': 'ppo_stock_v7_1A0001.zip', 'rank': 0, 'sharpe': 1.58, 'return': 13.97, 'drawdown': 8.49, 'strategy': '🔵 指数型'},  # 排名0：上证指数，使用专用模型，夏普1.58，收益率+13.97%，回撤8.49%
-    # 1   sz.002706 良信股份 → 使用英维克(002837)模型
-    {'code': 'sz.002706', 'name': '良信股份', 'model': 'ppo_stock_v7_002837.zip', 'rank': 1, 'sharpe': 3.25, 'return': 70.38, 'drawdown': 3.92, 'strategy': '🔵 稳健型'},  # 排名1：夏普3.25，收益率+70.38%，回撤3.92%
-    # 2   sz.300811 铂科新材 → 使用V16_300811特色模型
-    {'code': 'sz.300811', 'name': '铂科新材', 'model': 'ppo_stock_v7_300811.zip', 'rank': 2, 'sharpe': 2.61, 'return': 51.14, 'drawdown': 6.40, 'strategy': '🔵 稳健型'},  # 排名2：V16特色模型，夏普2.61，收益率+51.14%，回撤6.40%
-    # 3   sh.688208 道通科技 → 使用道通转债(118013)模型
-    {'code': 'sh.688208', 'name': '道通科技', 'model': 'ppo_stock_v7_118013.zip', 'rank': 3, 'sharpe': 2.87, 'return': 33.70, 'drawdown': 2.42, 'strategy': '🔵 稳健型'},  # 排名3：夏普2.87，收益率+33.70%，回撤2.42%
-    # 4   sz.002241 歌尔股份 → 使用圣邦股份(300661)模型
-    {'code': 'sz.002241', 'name': '歌尔股份', 'model': 'ppo_stock_v7_300661.zip', 'rank': 4, 'sharpe': 2.51, 'return': 66.15, 'drawdown': 9.38, 'strategy': '🟢 均衡型'},  # 排名4：夏普2.51，收益率+66.15%，回撤9.38%
-    # 5   sz.002475 立讯精密 → 使用隆扬电子(301389)模型
-    {'code': 'sz.002475', 'name': '立讯精密', 'model': 'ppo_stock_v7_301389.zip', 'rank': 5, 'sharpe': 2.43, 'return': 68.03, 'drawdown': 10.64, 'strategy': '🟢 均衡型'},  # 排名5：夏普2.43，收益率+68.03%，回撤10.64%
-    # 6   sz.300274 阳光电源 → 使用麦格米特(002851)模型
-    {'code': 'sz.300274', 'name': '阳光电源', 'model': 'ppo_stock_v7_002851.zip', 'rank': 6, 'sharpe': 2.42, 'return': 71.18, 'drawdown': 9.42, 'strategy': '🟢 均衡型'},  # 排名6：夏普2.42，收益率+71.18%，回撤9.42%
-    # 7   sz.300499 高澜股份 → 使用自身模型
-    {'code': 'sz.300499', 'name': '高澜股份', 'model': 'ppo_stock_v7_300499.zip', 'rank': 7, 'sharpe': 2.41, 'return': 105.36, 'drawdown': 17.00, 'strategy': '🟡 进取型'},  # 排名7：夏普2.41，收益率+105.36%，回撤17.00%
-    # 8   sh.603267 鸿远电子 → 使用航天电器(002025)模型
-    {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_002025.zip', 'rank': 8, 'sharpe': 2.40, 'return': 33.96, 'drawdown': 3.17, 'strategy': '🔵 稳健型'},  # 排名8：夏普2.40，收益率+33.96%，回撤3.17%
-    # 9   sz.002335 科华数据 → 使用自身模型
-    {'code': 'sz.002335', 'name': '科华数据', 'model': 'ppo_stock_v7_002335.zip', 'rank': 9, 'sharpe': 2.28, 'return': 103.71, 'drawdown': 14.82, 'strategy': '🟡 进取型'},  # 排名9：夏普2.28，收益率+103.71%，回撤14.82%
-    # 10  sz.002851 麦格米特 → 使用自身模型
-    {'code': 'sz.002851', 'name': '麦格米特', 'model': 'ppo_stock_v7_002851.zip', 'rank': 10, 'sharpe': 2.20, 'return': 33.24, 'drawdown': 7.18, 'strategy': '🟢 均衡型'},  # 排名10：夏普2.20，收益率+33.24%，回撤7.18%
-    # 11  sh.118013 道通转债 → 使用自身模型
-    {'code': 'sh.118013', 'name': '道通转债', 'model': 'ppo_stock_v7_118013.zip', 'rank': 11, 'sharpe': 2.12, 'return': 33.41, 'drawdown': 7.41, 'strategy': '🟢 均衡型'},  # 排名11：夏普2.12，收益率+33.41%，回撤7.41%
-    # 12  sz.300153 科泰电源 → 使用高澜股份(300499)模型
-    {'code': 'sz.300153', 'name': '科泰电源', 'model': 'ppo_stock_v7_300499.zip', 'rank': 12, 'sharpe': 2.08, 'return': 47.51, 'drawdown': 4.52, 'strategy': '🔵 稳健型'},  # 排名12：夏普2.08，收益率+47.51%，回撤4.52%
-    # 14  sz.300762 上海瀚讯 → 使用自身模型
-    {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip', 'rank': 14, 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},  # 排名14：夏普1.83，收益率+15.06%，回撤4.96%
-    # 15  sz.002025 航天电器 → 使用通用模型（原使用航天工程模型，现改为通用模型）
-    {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7.zip', 'rank': 15, 'sharpe': 1.75, 'return': 24.11, 'drawdown': 4.62, 'strategy': '🟢 均衡型'},  # 排名15：夏普1.75，收益率+24.11%，回撤4.62%
-    # 17  sz.300726 宏达电子 → 使用自身模型
-    {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip', 'rank': 17, 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},  # 排名17：夏普1.71，收益率+18.35%，回撤3.74%
-    # 19  sh.601012 隆基绿能 → 使用V11_601012特色模型
-    {'code': 'sh.601012', 'name': '隆基绿能', 'model': 'ppo_stock_v7_601012.zip', 'rank': 19, 'sharpe': 1.07, 'return': 12.19, 'drawdown': 7.77, 'strategy': '🟢 均衡型'},  # 排名19：V11特色模型，夏普1.07，收益率+12.19%，回撤7.77%
-    # 20  sh.600105 永鼎股份 → 使用V7（汉威模型）
-    {'code': 'sh.600105', 'name': '永鼎股份', 'model': 'ppo_stock_v7_300007.zip', 'rank': 20, 'sharpe': 2.44, 'return': 212.84, 'drawdown': 29.50, 'strategy': '🟡 进取型'},  # 排名20：收益冠军，V7夏普更优，但波动大，夏普2.44，收益率+212.84%，回撤29.50%
-    # 21  sz.000777 中核科技 → 使用V7（汉威模型）
-    {'code': 'sz.000777', 'name': '中核科技', 'model': 'ppo_stock_v7_300007.zip', 'rank': 21, 'sharpe': 2.22, 'return': 38.03, 'drawdown': 8.28, 'strategy': '🔵 稳健型'},  # 排名21：黄金组合：高夏普、低回撤、收益稳，夏普2.22，收益率+38.03%，回撤8.28%
-    # 22  sh.600118 中国卫星 → 使用V7（汉威模型）
-    {'code': 'sh.600118', 'name': '中国卫星', 'model': 'ppo_stock_v7_300007.zip', 'rank': 22, 'sharpe': 1.73, 'return': 52.35, 'drawdown': 14.96, 'strategy': '🟢 均衡型'},  # 排名22：表现均衡，V7各项指标全面超越V6，夏普1.73，收益率+52.35%，回撤14.96%
-    # 23  sz.300007 汉威科技 → 使用V7（汉威模型）
-    {'code': 'sz.300007', 'name': '汉威科技', 'model': 'ppo_stock_v7_300007.zip', 'rank': 23, 'sharpe': 1.72, 'return': 76.72, 'drawdown': 24.77, 'strategy': '🟡 进取型'},  # 排名23：模型本源，V7收益与风控远胜V6，夏普1.72，收益率+76.72%，回撤24.77%
-    # 24  sz.003021 兆威机电 → 使用V7（汉威模型）
-    {'code': 'sz.003021', 'name': '兆威机电', 'model': 'ppo_stock_v7_300007.zip', 'rank': 24, 'sharpe': 1.63, 'return': 27.12, 'drawdown': 7.43, 'strategy': '🟢 均衡型'},  # 排名24：V7夏普和收益均优于V6，夏普1.63，收益率+27.12%，回撤7.43%
-    # 25  sh.603278 大业股份 → 使用V7（汉威模型）
-    {'code': 'sh.603278', 'name': '大业股份', 'model': 'ppo_stock_v7_300007.zip', 'rank': 25, 'sharpe': 1.47, 'return': 24.28, 'drawdown': 7.55, 'strategy': '🟢 均衡型'},  # 排名25：收益较低，但V7风控指标更佳，夏普1.47，收益率+24.28%，回撤7.55%
-    # 26  sz.301413 安培龙 → 使用V6（安培龙模型）
-    {'code': 'sz.301413', 'name': '安培龙', 'model': 'ppo_stock_v7_301413.zip', 'rank': 26, 'sharpe': 1.21, 'return': 28.87, 'drawdown': 19.93, 'strategy': '🟡 进取型'},  # 排名26：特例：同名模型在其自身上稍占优，夏普1.21，收益率+28.87%，回撤19.93%
+    # ===== 数据中心/电气设备板块 =====
+    {'code': 'sz.002706', 'name': '良信股份', 'model': 'ppo_stock_v7_002837.zip', 'rank': 1, 'sharpe': 3.25, 'return': 70.38, 'drawdown': 3.92, 'strategy': '🔵 稳健型'},  # 使用英维克模型，夏普3.25，收益率+70.38%，回撤3.92%
+    {'code': 'sz.300811', 'name': '铂科新材', 'model': 'ppo_stock_v7_300811.zip', 'rank': 2, 'sharpe': 2.61, 'return': 51.14, 'drawdown': 6.40, 'strategy': '🔵 稳健型'},  # 自身模型，夏普2.61，收益率+51.14%，回撤6.40%
+    {'code': 'sz.002241', 'name': '歌尔股份', 'model': 'ppo_stock_v7_300661.zip', 'rank': 4, 'sharpe': 2.51, 'return': 66.15, 'drawdown': 9.38, 'strategy': '🟢 均衡型'},  # 使用圣邦股份模型，夏普2.51，收益率+66.15%，回撤9.38%
+    {'code': 'sz.002475', 'name': '立讯精密', 'model': 'ppo_stock_v7_301389.zip', 'rank': 5, 'sharpe': 2.43, 'return': 68.03, 'drawdown': 10.64, 'strategy': '🟢 均衡型'},  # 使用隆扬电子模型，夏普2.43，收益率+68.03%，回撤10.64%
+    {'code': 'sz.300499', 'name': '高澜股份', 'model': 'ppo_stock_v7_300499.zip', 'rank': 7, 'sharpe': 2.41, 'return': 105.36, 'drawdown': 17.00, 'strategy': '🟡 进取型'},  # 自身模型，夏普2.41，收益率+105.36%，回撤17.00%
+    {'code': 'sh.603267', 'name': '鸿远电子', 'model': 'ppo_stock_v7_002025.zip', 'rank': 8, 'sharpe': 2.40, 'return': 33.96, 'drawdown': 3.17, 'strategy': '🔵 稳健型'},  # 使用航天电器模型，夏普2.40，收益率+33.96%，回撤3.17%
+    {'code': 'sz.002025', 'name': '航天电器', 'model': 'ppo_stock_v7_300762.zip', 'rank': 15, 'sharpe': 2.12, 'return': 30.65, 'drawdown': 8.46, 'strategy': '🟢 均衡型'},  # 使用上海瀚讯模型，夏普2.12，收益率+30.65%，回撤8.46%
+    {'code': 'sh.600118', 'name': '中国卫星', 'model': 'ppo_stock_v11_custom.zip', 'rank': 18, 'sharpe': 2.15, 'return': 71.34, 'drawdown': 14.96, 'strategy': '🟢 均衡型'},  # V11自定义模型，夏普2.15，收益率+71.34%，回撤14.96%
+    {'code': 'sz.300007', 'name': '汉威科技', 'model': 'ppo_stock_v7_300007.zip', 'rank': 19, 'sharpe': 1.72, 'return': 76.72, 'drawdown': 24.77, 'strategy': '🟡 进取型'},  # 自身模型，夏普1.72，收益率+76.72%，回撤24.77%
+    {'code': 'sz.300726', 'name': '宏达电子', 'model': 'ppo_stock_v7_300726.zip', 'rank': 17, 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},  # 自身模型，夏普1.71，收益率+18.35%，回撤3.74%
+    {'code': 'sz.003021', 'name': '兆威机电', 'model': 'ppo_stock_v7_300007.zip', 'rank': 21, 'sharpe': 1.63, 'return': 27.12, 'drawdown': 7.43, 'strategy': '🟢 均衡型'},  # 使用汉威科技模型，夏普1.63，收益率+27.12%，回撤7.43%
+    {'code': 'sh.600879', 'name': '航天电子', 'model': 'ppo_stock_v11_custom.zip', 'rank': 22, 'sharpe': 1.75, 'return': 45.66, 'drawdown': 16.49, 'strategy': '🟢 均衡型'},  # V11自定义模型，夏普1.75，收益率+45.66%，回撤16.49%
+    {'code': 'sz.300762', 'name': '上海瀚讯', 'model': 'ppo_stock_v7_300762.zip', 'rank': 14, 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},  # 自身模型，夏普1.83，收益率+15.06%，回撤4.96%
+    {'code': 'sh.603278', 'name': '大业股份', 'model': 'ppo_stock_v7_300007.zip', 'rank': 24, 'sharpe': 1.47, 'return': 24.28, 'drawdown': 7.55, 'strategy': '🟢 均衡型'},  # 使用汉威科技模型，夏普1.47，收益率+24.28%，回撤7.55%
+
+    # ===== 稀土/有色金属板块 =====
+    {'code': 'sh.600392', 'name': '盛和资源', 'model': 'ppo_stock_v7_300748.zip', 'rank': 1, 'sharpe': 2.64, 'return': 67.50, 'drawdown': 10.79, 'strategy': '🟢 均衡型'},  # 使用金力永磁模型，夏普2.64，收益率+67.50%，回撤10.79%
+    {'code': 'sh.600111', 'name': '北方稀土', 'model': 'ppo_stock_v7_000831.zip', 'rank': 2, 'sharpe': 2.41, 'return': 60.16, 'drawdown': 7.40, 'strategy': '🔵 稳健型'},  # 使用中国稀土模型，夏普2.41，收益率+60.16%，回撤7.40%
+    {'code': 'sh.603799', 'name': '华友钴业', 'model': 'ppo_stock_v7_000831.zip', 'rank': 3, 'sharpe': 2.20, 'return': 47.46, 'drawdown': 14.85, 'strategy': '🟢 均衡型'},  # 使用中国稀土模型，夏普2.20，收益率+47.46%，回撤14.85%
+    {'code': 'sz.002738', 'name': '中矿资源', 'model': 'ppo_stock_v7_000831.zip', 'rank': 4, 'sharpe': 1.97, 'return': 59.14, 'drawdown': 16.18, 'strategy': '🟢 均衡型'},  # 使用中国稀土模型，夏普1.97，收益率+59.14%，回撤16.18%
+    {'code': 'sh.603993', 'name': '洛阳钼业', 'model': 'ppo_stock_v7_000831.zip', 'rank': 5, 'sharpe': 1.96, 'return': 54.83, 'drawdown': 22.82, 'strategy': '🟡 进取型'},  # 使用中国稀土模型，夏普1.96，收益率+54.83%，回撤22.82%
+    {'code': 'sz.002460', 'name': '赣锋锂业', 'model': 'ppo_stock_v7_300748.zip', 'rank': 6, 'sharpe': 1.62, 'return': 26.77, 'drawdown': 7.27, 'strategy': '🟢 均衡型'},  # 使用金力永磁模型，夏普1.62，收益率+26.77%，回撤7.27%
+    {'code': 'sz.000831', 'name': '中国稀土', 'model': 'ppo_stock_v7_300748.zip', 'rank': 7, 'sharpe': 1.38, 'return': 26.88, 'drawdown': 10.70, 'strategy': '🟢 均衡型'},  # 使用金力永磁模型，夏普1.38，收益率+26.88%，回撤10.70%
+    {'code': 'sz.300748', 'name': '金力永磁', 'model': 'ppo_stock_v7_300748.zip', 'rank': 8, 'sharpe': 1.21, 'return': 37.33, 'drawdown': 14.95, 'strategy': '🟢 均衡型'},  # 自身模型，夏普1.21，收益率+37.33%，回撤14.95%
+    {'code': 'sz.002466', 'name': '天齐锂业', 'model': 'ppo_stock_v7_000831.zip', 'rank': 9, 'sharpe': 1.05, 'return': 17.76, 'drawdown': 17.19, 'strategy': '🟡 进取型'},  # 使用中国稀土模型，夏普1.05，收益率+17.76%，回撤17.19%
+
+    # ===== 汽车零部件板块 =====
+    {'code': 'sz.002050', 'name': '三花智控', 'model': 'ppo_stock_v7_601689.zip', 'rank': 1, 'sharpe': 2.20, 'return': 54.06, 'drawdown': 10.64, 'strategy': '🟢 均衡型'},  # 使用拓普集团模型，夏普2.20，收益率+54.06%，回撤10.64%
+    {'code': 'sh.601689', 'name': '拓普集团', 'model': 'ppo_stock_v7_601689.zip', 'rank': 3, 'sharpe': 1.04, 'return': 18.54, 'drawdown': 7.40, 'strategy': '🟢 均衡型'},  # 自身模型，夏普1.04，收益率+18.54%，回撤7.40%（建议运行回测验证）
+    {'code': 'sz.000700', 'name': '模塑科技', 'model': 'ppo_stock_v7.zip', 'rank': 32, 'sharpe': 1.35, 'return': 43.26, 'drawdown': 27.21, 'strategy': '🟢 均衡型'},  # 使用通用模型，夏普1.35，收益率+43.26%，回撤27.21%
+
+    # ===== 有色金属/矿业板块（V11自定义模型）=====
+    {'code': 'sz.000408', 'name': '藏格矿业', 'model': 'ppo_stock_v11_custom.zip', 'rank': 23, 'sharpe': 2.17, 'return': 31.70, 'drawdown': 11.32, 'strategy': '🟢 均衡型'},  # V11自定义模型，夏普2.17，收益率+31.70%，回撤11.32%
+    {'code': 'sz.000893', 'name': '亚钾国际', 'model': 'ppo_stock_v11_custom.zip', 'rank': 24, 'sharpe': 1.88, 'return': 34.42, 'drawdown': 12.64, 'strategy': '🟢 均衡型'},  # V11自定义模型，夏普1.88，收益率+34.42%，回撤12.64%
+    {'code': 'sz.000603', 'name': '盛达资源', 'model': 'ppo_stock_v11_custom.zip', 'rank': 25, 'sharpe': 1.31, 'return': 29.53, 'drawdown': 19.41, 'strategy': '🟡 进取型'},  # V11自定义模型，夏普1.31，收益率+29.53%，回撤19.41%
+    {'code': 'sz.000933', 'name': '神火股份', 'model': 'ppo_stock_v11_custom.zip', 'rank': 26, 'sharpe': 1.37, 'return': 29.19, 'drawdown': 11.37, 'strategy': '🟢 均衡型'},  # V11自定义模型，夏普1.37，收益率+29.19%，回撤11.37%
+    {'code': 'sz.000807', 'name': '云铝股份', 'model': 'ppo_stock_v11_custom.zip', 'rank': 27, 'sharpe': 1.10, 'return': 22.32, 'drawdown': 19.15, 'strategy': '🟡 进取型'},  # V11自定义模型，夏普1.10，收益率+22.32%，回撤19.15%
+    {'code': 'sh.600577', 'name': '精达股份', 'model': 'ppo_stock_v11_custom.zip', 'rank': 30, 'sharpe': 0.66, 'return': 11.48, 'drawdown': 20.18, 'strategy': '🟡 进取型'},  # V11自定义模型，夏普0.66，收益率+11.48%，回撤20.18%（需关注风险）
 ]
 
 # ==================== 按夏普比率排序股票列表 ====================
 # 按照夏普比率从高到低排序，并重新分配排名
 # 注意：如果股票没有夏普比率（sharpe为None或0），则排在最后
 STOCK_LIST = sorted(STOCK_LIST, key=lambda x: x.get('sharpe') if x.get('sharpe') is not None and x.get('sharpe') > 0 else -999, reverse=True)
-# 重新分配排名（从0开始）
+# 重新分配排名（从1开始）
 for idx, stock in enumerate(STOCK_LIST):
-    stock['rank'] = idx
+    stock['rank'] = idx + 1
 
 # 当前处理的股票代码（会在循环中动态设置）
 STOCK_CODE = None
@@ -1554,7 +1568,22 @@ PARTIAL_STOP_LOSS_ACTION = 1  # 部分止损动作：1=卖出50%
 # V15新增配置：基于ATR（平均真实波幅）的动态止损
 ENABLE_ATR_STOP_LOSS = True   # 启用ATR动态止损，类似海龟法则
 ATR_PERIOD = 14               # ATR计算周期
-ATR_MULTIPLIER = 2.0          # 止损倍数：成本价 - ATR * 倍数
+ATR_MULTIPLIER = 2.0          # 止损倍数：从开仓后高点回落超过 ATR * 倍数时平仓
+
+# V18新增配置：基于波动率的动态止损和移动止盈
+ENABLE_DYNAMIC_ATR_STOP_LOSS = True  # 启用基于ATR的动态止损（从开仓后高点回落）
+DYNAMIC_ATR_MULTIPLIER = 2.0         # 动态止损倍数：开仓后高点 - ATR * 倍数
+ENABLE_TRAILING_STOP = True          # 启用移动止盈机制
+TRAILING_STOP_PROFIT_15 = 0.15        # 浮盈15%后启动移动止盈
+TRAILING_STOP_PROFIT_30 = 0.30        # 浮盈30%后启动跟踪回撤止盈
+TRAILING_STOP_DRAWDOWN = 0.10         # 从最高点回撤10%时止盈
+ENABLE_VOLATILITY_POSITION = True     # 启用基于波动率的动态仓位管理
+VOLATILITY_THRESHOLD = 0.25           # 历史波动率阈值（25%）
+HIGH_VOLATILITY_POSITION_RATIO = 0.6  # 高波动标的仓位降低比例（60%）
+BASE_MAX_POSITION = 0.9                # 基础最大仓位（90%）
+ENABLE_SECTOR_RISK_CONTROL = True     # 启用板块联动风控
+SECTOR_RISK_STOCK_COUNT = 3           # 板块内触发风险的股票数量阈值
+SECTOR_RISK_DRAWDOWN = 0.05            # 板块内股票回撤阈值（5%）
 
 # V16新增配置：趋势/震荡双策略 + 融合
 ENABLE_REGIME_STRATEGY = True          # 启用趋势/震荡双模态策略
@@ -1674,11 +1703,6 @@ CANDIDATE_MODELS = [  # 候选模型列表（包含所有股票的专用模型�
         'name': '002266模型',
         'paths': ['ppo_stock_v7_002266.zip', 'models_v7_002266/best/best_model.zip'],
         'description': '浙富控股002266专用模型'
-    },
-    {
-        'name': '300153模型',
-        'paths': ['ppo_stock_v7_300153.zip', 'models_v7_300153/best/best_model.zip'],
-        'description': '科泰电源300153专用模型'
     },
     {
         'name': '601399模型',
@@ -4907,68 +4931,115 @@ def calculate_atr(df, period=14, return_meta=False):
     except Exception:
         return (None, False) if return_meta else None
 
-def check_stop_loss_take_profit(current_price, cost_price, shares_held, atr_value=None):
+def check_stop_loss_take_profit(current_price, cost_price, shares_held, atr_value=None, 
+                                highest_price_since_entry=None, entry_price=None):
     """
-    检查止损止盈条件
-    返回: (triggered, action, reason, profit_loss_pct, atr_stop_price)
+    检查止损止盈条件（V18增强版：支持基于ATR的动态止损和移动止盈）
+    返回: (triggered, action, reason, profit_loss_pct, atr_stop_price, stop_loss_price)
     - triggered: 是否触发止损/止盈
     - action: 建议动作（0=全部卖出, 1=卖出50%, 2=卖出25%）
     - reason: 触发原因
     - profit_loss_pct: 盈亏百分比
+    - atr_stop_price: ATR止损价
+    - stop_loss_price: 当前止损价（用于移动止盈）
     """
     if not ENABLE_STOP_LOSS_TAKE_PROFIT:
-        return False, None, None, None, None
+        return False, None, None, None, None, None
     
     if shares_held <= 0 or cost_price is None or cost_price <= 0:
-        return False, None, None, None, None
-    
-    atr_stop_price = None
-    if ENABLE_ATR_STOP_LOSS and atr_value is not None and atr_value > 0:
-        atr_stop_price = cost_price - ATR_MULTIPLIER * atr_value
+        return False, None, None, None, None, None
     
     # 计算盈亏百分比
     profit_loss_pct = ((current_price - cost_price) / cost_price) * 100
+    current_profit_pct = profit_loss_pct / 100.0  # 转换为小数形式
     
-    # ATR动态止损（海龟风格：成本价 - ATR×倍数）
-    if atr_stop_price is not None and current_price <= atr_stop_price:
-        return True, STOP_LOSS_ACTION, (
-            f"触发ATR动态止损：当前价{current_price:.2f} ≤ 止损价{atr_stop_price:.2f} "
-            f"(成本价{cost_price:.2f} - ATR×{ATR_MULTIPLIER}，ATR={atr_value:.2f})"
-        ), profit_loss_pct, atr_stop_price
+    # 初始化止损价（用于移动止盈）
+    stop_loss_price = cost_price
+    atr_stop_price = None
+    dynamic_stop_loss_threshold = None
+    
+    # ========== V18新增：基于ATR的动态止损（从开仓后高点回落） ==========
+    if ENABLE_DYNAMIC_ATR_STOP_LOSS and atr_value is not None and atr_value > 0:
+        if highest_price_since_entry is not None and highest_price_since_entry > 0:
+            # 从开仓后高点回落超过dynamic_stop_loss_threshold时平仓
+            dynamic_stop_loss_threshold = DYNAMIC_ATR_MULTIPLIER * atr_value
+            dynamic_stop_price = highest_price_since_entry - dynamic_stop_loss_threshold
+            
+            # 当股价从开仓后高点回落超过dynamic_stop_loss_threshold时，平仓
+            if current_price <= dynamic_stop_price:
+                return True, STOP_LOSS_ACTION, (
+                    f"触发ATR动态止损（从高点回落）：当前价{current_price:.2f} ≤ 止损价{dynamic_stop_price:.2f} "
+                    f"(开仓后高点{highest_price_since_entry:.2f} - ATR×{DYNAMIC_ATR_MULTIPLIER}，ATR={atr_value:.2f})"
+                ), profit_loss_pct, dynamic_stop_price, dynamic_stop_price
+    
+    # ========== V18新增：移动止盈机制（盈利保护） ==========
+    if ENABLE_TRAILING_STOP and entry_price is not None and entry_price > 0:
+        # 浮盈超过15%后，将止损线上移至成本价或开仓价的1.05倍，确保不亏
+        if current_profit_pct > TRAILING_STOP_PROFIT_15:
+            stop_loss_price = max(stop_loss_price, entry_price * 1.05)
+        
+        # 浮盈超过30%后，跟踪回撤，如从最高点回撤超过10%，则止盈
+        if current_profit_pct > TRAILING_STOP_PROFIT_30:
+            if highest_price_since_entry is not None and highest_price_since_entry > 0:
+                drawdown_from_high = (highest_price_since_entry - current_price) / highest_price_since_entry
+                if drawdown_from_high > TRAILING_STOP_DRAWDOWN:
+                    return True, TAKE_PROFIT_ACTION, (
+                        f"触发移动止盈：从最高点{highest_price_since_entry:.2f}回撤{drawdown_from_high*100:.2f}% "
+                        f"> {TRAILING_STOP_DRAWDOWN*100:.2f}%，当前盈利{profit_loss_pct:.2f}%，建议止盈"
+                    ), profit_loss_pct, atr_stop_price, stop_loss_price
+        
+        # 如果当前价格跌破移动止损价，触发止损
+        if current_price < stop_loss_price and current_profit_pct > TRAILING_STOP_PROFIT_15:
+            return True, STOP_LOSS_ACTION, (
+                f"触发移动止损：当前价{current_price:.2f} < 移动止损价{stop_loss_price:.2f} "
+                f"(浮盈{profit_loss_pct:.2f}%后启动盈利保护)"
+            ), profit_loss_pct, atr_stop_price, stop_loss_price
+    
+    # 传统ATR止损（成本价 - ATR×倍数）- 保留作为备用
+    if ENABLE_ATR_STOP_LOSS and atr_value is not None and atr_value > 0:
+        atr_stop_price = cost_price - ATR_MULTIPLIER * atr_value
+        if current_price <= atr_stop_price:
+            return True, STOP_LOSS_ACTION, (
+                f"触发ATR动态止损：当前价{current_price:.2f} ≤ 止损价{atr_stop_price:.2f} "
+                f"(成本价{cost_price:.2f} - ATR×{ATR_MULTIPLIER}，ATR={atr_value:.2f})"
+            ), profit_loss_pct, atr_stop_price, stop_loss_price
     
     # 检查止盈条件
     if profit_loss_pct >= TAKE_PROFIT_PCT:
         if TAKE_PROFIT_ACTION == 0:
-            return True, 0, f"触发止盈：盈利{profit_loss_pct:.2f}% >= {TAKE_PROFIT_PCT}%，建议全部卖出", profit_loss_pct, atr_stop_price
+            return True, 0, f"触发止盈：盈利{profit_loss_pct:.2f}% >= {TAKE_PROFIT_PCT}%，建议全部卖出", profit_loss_pct, atr_stop_price, stop_loss_price
         elif TAKE_PROFIT_ACTION == 1:
-            return True, 1, f"触发止盈：盈利{profit_loss_pct:.2f}% >= {TAKE_PROFIT_PCT}%，建议卖出50%锁定利润", profit_loss_pct, atr_stop_price
+            return True, 1, f"触发止盈：盈利{profit_loss_pct:.2f}% >= {TAKE_PROFIT_PCT}%，建议卖出50%锁定利润", profit_loss_pct, atr_stop_price, stop_loss_price
         elif TAKE_PROFIT_ACTION == 2:
-            return True, 2, f"触发止盈：盈利{profit_loss_pct:.2f}% >= {TAKE_PROFIT_PCT}%，建议卖出25%锁定部分利润", profit_loss_pct, atr_stop_price
+            return True, 2, f"触发止盈：盈利{profit_loss_pct:.2f}% >= {TAKE_PROFIT_PCT}%，建议卖出25%锁定部分利润", profit_loss_pct, atr_stop_price, stop_loss_price
     
     # 检查止损条件
     if profit_loss_pct <= STOP_LOSS_PCT:
-        return True, STOP_LOSS_ACTION, f"触发止损：亏损{abs(profit_loss_pct):.2f}% <= {abs(STOP_LOSS_PCT)}%，建议全部卖出止损", profit_loss_pct, atr_stop_price
+        return True, STOP_LOSS_ACTION, f"触发止损：亏损{abs(profit_loss_pct):.2f}% <= {abs(STOP_LOSS_PCT)}%，建议全部卖出止损", profit_loss_pct, atr_stop_price, stop_loss_price
     
     # 检查部分止损条件（如果启用）
     if ENABLE_PARTIAL_STOP_LOSS and profit_loss_pct <= PARTIAL_STOP_LOSS_PCT and profit_loss_pct > STOP_LOSS_PCT:
-        return True, PARTIAL_STOP_LOSS_ACTION, f"触发部分止损：亏损{abs(profit_loss_pct):.2f}% <= {abs(PARTIAL_STOP_LOSS_PCT)}%，建议卖出50%降低风险", profit_loss_pct, atr_stop_price
+        return True, PARTIAL_STOP_LOSS_ACTION, f"触发部分止损：亏损{abs(profit_loss_pct):.2f}% <= {abs(PARTIAL_STOP_LOSS_PCT)}%，建议卖出50%降低风险", profit_loss_pct, atr_stop_price, stop_loss_price
     
-    return False, None, None, profit_loss_pct, atr_stop_price
+    return False, None, None, profit_loss_pct, atr_stop_price, stop_loss_price
 
-def apply_stop_loss_take_profit(final_action, current_price, cost_price, shares_held, atr_value=None):
+def apply_stop_loss_take_profit(final_action, current_price, cost_price, shares_held, atr_value=None,
+                                highest_price_since_entry=None, entry_price=None):
     """
-    应用止损止盈逻辑，调整最终决策
+    应用止损止盈逻辑，调整最终决策（V18增强版）
     返回: (adjusted_action, stop_loss_info)
     """
-    triggered, action, reason, profit_loss_pct, atr_stop_price = check_stop_loss_take_profit(
-        current_price, cost_price, shares_held, atr_value=atr_value
+    triggered, action, reason, profit_loss_pct, atr_stop_price, stop_loss_price = check_stop_loss_take_profit(
+        current_price, cost_price, shares_held, atr_value=atr_value,
+        highest_price_since_entry=highest_price_since_entry, entry_price=entry_price
     )
     
     if not triggered:
         return final_action, {
             'triggered': False,
             'profit_loss_pct': profit_loss_pct,
-            'atr_stop_price': atr_stop_price
+            'atr_stop_price': atr_stop_price,
+            'stop_loss_price': stop_loss_price
         }
     
     # 如果触发止损/止盈，覆盖原始决策
@@ -4978,10 +5049,134 @@ def apply_stop_loss_take_profit(final_action, current_price, cost_price, shares_
         'reason': reason,
         'profit_loss_pct': profit_loss_pct,
         'original_action': final_action,
-        'atr_stop_price': atr_stop_price
+        'atr_stop_price': atr_stop_price,
+        'stop_loss_price': stop_loss_price
     }
     
     return action, stop_loss_info
+
+# ==================== V18: 基于波动率的动态仓位管理 ====================
+
+def calculate_position_size(volatility, base_position=BASE_MAX_POSITION):
+    """
+    根据历史波动率动态计算仓位上限
+    - volatility: 历史波动率（小数形式，如0.25表示25%）
+    - base_position: 基础最大仓位（默认0.9即90%）
+    返回: 调整后的仓位上限
+    """
+    if not ENABLE_VOLATILITY_POSITION:
+        return base_position
+    
+    if volatility > VOLATILITY_THRESHOLD:  # 如果历史波动率大于阈值（如25%）
+        # 降至基础仓位的60%
+        adjusted_position = base_position * HIGH_VOLATILITY_POSITION_RATIO
+        return adjusted_position
+    else:
+        return base_position
+
+def calculate_volatility(closes, period=20):
+    """
+    计算历史波动率
+    - closes: 收盘价序列
+    - period: 计算周期（默认20天）
+    返回: 波动率（小数形式）
+    """
+    if closes is None or len(closes) < period + 1:
+        return None
+    
+    try:
+        closes_arr = np.array(closes[-period-1:], dtype=np.float64)
+        returns = np.diff(closes_arr) / closes_arr[:-1]
+        volatility = np.std(returns)
+        return float(volatility)
+    except Exception:
+        return None
+
+# ==================== V18: 板块联动风控 ====================
+
+# 全局板块持仓跟踪：{sector_name: {stock_code: {'entry_price': float, 'current_price': float, 'drawdown': float}}}
+sector_positions = {}
+
+def get_stock_sector(stock_code):
+    """
+    获取股票所属板块
+    返回: 板块名称，如果无法确定则返回None
+    """
+    # 这里可以根据实际情况实现板块识别逻辑
+    # 可以从股票代码、名称或外部数据源获取板块信息
+    # 示例：根据股票代码前缀或名称判断
+    sector_map = {
+        '军工': ['300900', '000547', '002151', '002025', '603698', '300762'],
+        '航空航天': ['300900', '000547', '002025', '603698'],
+        '电力设备': ['002335', '002364', '002518', '300274'],
+        '新能源': ['601012', '300274'],
+        '消费电子': ['002241', '002475'],
+    }
+    
+    code_num = stock_code.split('.')[-1] if '.' in stock_code else stock_code
+    for sector, codes in sector_map.items():
+        if code_num in codes:
+            return sector
+    return None
+
+def update_sector_positions(stock_code, entry_price, current_price):
+    """
+    更新板块持仓信息
+    """
+    if not ENABLE_SECTOR_RISK_CONTROL:
+        return
+    
+    sector = get_stock_sector(stock_code)
+    if sector is None:
+        return
+    
+    if sector not in sector_positions:
+        sector_positions[sector] = {}
+    
+    if entry_price and entry_price > 0:
+        drawdown = ((current_price - entry_price) / entry_price) if entry_price > 0 else 0.0
+        sector_positions[sector][stock_code] = {
+            'entry_price': entry_price,
+            'current_price': current_price,
+            'drawdown': drawdown
+        }
+
+def check_sector_risk_control(stock_code, current_price):
+    """
+    检查板块联动风控
+    当监测到板块内多只股票（如超过3只）同时触发较大回撤（如>5%）时，
+    应判定板块面临系统性风险，自动降低该板块所有持仓的总仓位
+    返回: (should_reduce_position, reason, sector_risk_level)
+    - should_reduce_position: 是否应该降低仓位
+    - reason: 原因说明
+    - sector_risk_level: 板块风险等级（0-1，1为最高风险）
+    """
+    if not ENABLE_SECTOR_RISK_CONTROL:
+        return False, None, 0.0
+    
+    sector = get_stock_sector(stock_code)
+    if sector is None or sector not in sector_positions:
+        return False, None, 0.0
+    
+    # 统计板块内触发回撤的股票数量
+    high_drawdown_count = 0
+    total_stocks = len(sector_positions[sector])
+    
+    for code, info in sector_positions[sector].items():
+        drawdown = abs(info.get('drawdown', 0.0))
+        if drawdown > SECTOR_RISK_DRAWDOWN:  # 回撤超过阈值（如5%）
+            high_drawdown_count += 1
+    
+    # 如果板块内超过阈值数量的股票同时触发较大回撤，判定为系统性风险
+    if high_drawdown_count >= SECTOR_RISK_STOCK_COUNT and total_stocks >= SECTOR_RISK_STOCK_COUNT:
+        sector_risk_level = min(1.0, high_drawdown_count / total_stocks)
+        reason = (
+            f"板块联动风控：{sector}板块内{high_drawdown_count}只股票同时回撤超过{SECTOR_RISK_DRAWDOWN*100:.1f}%，"
+            f"判定为系统性风险，建议降低该板块仓位"
+        )
+        return True, reason, sector_risk_level
+    
+    return False, None, 0.0
 
 # ==================== V16: 趋势/震荡双策略辅助函数 ====================
 
@@ -5425,8 +5620,26 @@ def get_kelly_position_size(confidence, predicted_return_pct, stock_code, indica
     if use_estimated:
         return_adjusted = return_adjusted * 0.7  # 样本不足时，使用70%的仓位
     
-    # 限制在最小和最大仓位之间
-    final_position = max(MIN_KELLY_POSITION, min(MAX_KELLY_POSITION, return_adjusted))
+    # V18新增：基于波动率的动态仓位管理
+    max_position_limit = MAX_KELLY_POSITION
+    if ENABLE_VOLATILITY_POSITION:
+        # 计算历史波动率（如果未提供，尝试从closes计算）
+        volatility = None
+        if volatility_pct is not None:
+            volatility = volatility_pct / 100.0  # 转换为小数形式
+        else:
+            # 尝试从indicator_summary获取波动率
+            if indicator_summary and 'Volatility' in indicator_summary:
+                vol_val = indicator_summary['Volatility']
+                if isinstance(vol_val, (int, float)):
+                    volatility = vol_val / 100.0
+        
+        # 根据波动率动态调整最大仓位
+        if volatility is not None:
+            max_position_limit = calculate_position_size(volatility, base_position=MAX_KELLY_POSITION)
+    
+    # 限制在最小和最大仓位之间（使用动态调整后的最大仓位）
+    final_position = max(MIN_KELLY_POSITION, min(max_position_limit, return_adjusted))
     
     return {
         'kelly_position': final_position,
@@ -5786,7 +5999,7 @@ optimal_models_info = [
     {'rank': 11, 'code': 'sh.118013', 'name': '道通转债', 'model': '道通转债(118013)模型', 'sharpe': 2.12, 'return': 33.41, 'drawdown': 7.41, 'strategy': '🟢 均衡型'},
     {'rank': 12, 'code': 'sz.300153', 'name': '科泰电源', 'model': '高澜股份(300499)模型', 'sharpe': 2.08, 'return': 47.51, 'drawdown': 4.52, 'strategy': '🔵 稳健型'},
     {'rank': 14, 'code': 'sz.300762', 'name': '上海瀚讯', 'model': '上海瀚讯(300762)模型', 'sharpe': 1.83, 'return': 15.06, 'drawdown': 4.96, 'strategy': '🟢 均衡型'},
-    {'rank': 15, 'code': 'sz.002025', 'name': '航天电器', 'model': '通用模型', 'sharpe': 1.75, 'return': 24.11, 'drawdown': 4.62, 'strategy': '🟢 均衡型'},
+    {'rank': 15, 'code': 'sz.002025', 'name': '航天电器', 'model': '上海瀚讯(300762)模型', 'sharpe': 2.12, 'return': 30.65, 'drawdown': 8.46, 'strategy': '🟢 均衡型'},
     {'rank': 17, 'code': 'sz.300726', 'name': '宏达电子', 'model': '宏达电子(300726)模型', 'sharpe': 1.71, 'return': 18.35, 'drawdown': 3.74, 'strategy': '🟢 均衡型'},
     {'rank': 19, 'code': 'sh.601012', 'name': '隆基绿能', 'model': 'V11_601012特色模型', 'sharpe': 1.07, 'return': 12.19, 'drawdown': 7.77, 'strategy': '🟢 均衡型'},
 ]
@@ -6911,9 +7124,48 @@ try:
                             current_cost_price = float(actual_buy_price_val)
                 
                 if current_cost_price and current_cost_price > 0:
-                    # 应用止损止盈逻辑
+                    # V18新增：获取开仓后最高价和开仓价
+                    highest_price_since_entry = None
+                    entry_price = current_cost_price  # 使用成本价作为开仓价
+                    
+                    # 尝试从持仓状态获取开仓后最高价（如果已记录）
+                    if portfolio_state_for_stop:
+                        highest_price_since_entry = portfolio_state_for_stop.get('highest_price_since_entry')
+                        if highest_price_since_entry and isinstance(highest_price_since_entry, (int, float)) and highest_price_since_entry > 0:
+                            highest_price_since_entry = float(highest_price_since_entry)
+                        else:
+                            # 如果没有记录，使用当前价格和成本价中的较高者作为初始最高价
+                            highest_price_since_entry = max(current_price, entry_price)
+                    else:
+                        highest_price_since_entry = max(current_price, entry_price)
+                    
+                    # 更新开仓后最高价
+                    if current_price > highest_price_since_entry:
+                        highest_price_since_entry = current_price
+                    
+                    # V18新增：板块联动风控检查
+                    sector_risk_reduce = False
+                    sector_risk_reason = None
+                    if ENABLE_SECTOR_RISK_CONTROL:
+                        should_reduce, reason, risk_level = check_sector_risk_control(STOCK_CODE, current_price)
+                        if should_reduce:
+                            sector_risk_reduce = True
+                            sector_risk_reason = reason
+                            # 如果板块风险高，建议减仓
+                            if final_action in [4, 5, 6]:  # 如果是买入动作，改为持有或减仓
+                                final_action = 3  # 改为持有
+                            elif final_action == 3:  # 如果是持有，改为减仓
+                                final_action = 2  # 改为卖出25%
+                    
+                    # 更新板块持仓信息
+                    update_sector_positions(STOCK_CODE, entry_price, current_price)
+                    
+                    # 应用止损止盈逻辑（V18增强版：支持动态ATR止损和移动止盈）
                     final_action, stop_loss_info = apply_stop_loss_take_profit(
-                        final_action, current_price, current_cost_price, shares_held, atr_value=atr_value
+                        final_action, current_price, current_cost_price, shares_held, 
+                        atr_value=atr_value,
+                        highest_price_since_entry=highest_price_since_entry,
+                        entry_price=entry_price
                     )
                     final_operation = map_action_to_operation(final_action)
                     
@@ -6923,15 +7175,25 @@ try:
                         reason = stop_loss_info.get('reason', '')
                         original_action = stop_loss_info.get('original_action')
                         atr_stop_price_val = stop_loss_info.get('atr_stop_price')
+                        stop_loss_price_val = stop_loss_info.get('stop_loss_price')
                         
-                        print(f"\n   🚨 V13止损止盈风险控制:")
+                        print(f"\n   🚨 V18止损止盈风险控制:")
                         print(f"      ⚠️  {reason}")
                         if original_action is not None:
                             print(f"      📊 原始决策: {map_action_to_operation(original_action)}")
                         print(f"      ✅ 调整后决策: {final_operation}")
                         print(f"      💰 当前盈亏: {profit_loss_pct:+.2f}% (成本价: {current_cost_price:.4f}元, 当前价: {current_price:.2f}元)")
+                        print(f"      📈 开仓后最高价: {highest_price_since_entry:.2f}元")
                         if atr_stop_price_val:
                             print(f"      🛡️  ATR动态止损价: {atr_stop_price_val:.2f}元 (ATR×{ATR_MULTIPLIER})")
+                        if stop_loss_price_val and stop_loss_price_val != current_cost_price:
+                            print(f"      🛡️  移动止损价: {stop_loss_price_val:.2f}元 (盈利保护)")
+                    
+                    # V18新增：显示板块联动风控信息
+                    if sector_risk_reduce:
+                        print(f"\n   🚨 V18板块联动风控:")
+                        print(f"      ⚠️  {sector_risk_reason}")
+                        print(f"      ✅ 已自动调整决策以降低板块风险")
                     else:
                         # 显示当前盈亏状态（未触发止损止盈）
                         profit_loss_pct = stop_loss_info.get('profit_loss_pct', 0) if stop_loss_info else None
@@ -6970,11 +7232,20 @@ try:
                     if transformer_prediction is not None:
                         predicted_return_pct = ((transformer_prediction - current_price) / current_price) * 100
                     
-                    # 计算波动率（用于估算平均亏损）
+                    # 计算波动率（用于估算平均亏损和动态仓位管理）
                     volatility_pct = None
+                    volatility = None
                     if len(closes) >= 20:
                         recent_returns = np.diff(closes[-20:]) / closes[-20:-1] * 100
                         volatility_pct = np.std(recent_returns) if len(recent_returns) > 0 else None
+                        if volatility_pct is not None:
+                            volatility = volatility_pct / 100.0  # 转换为小数形式
+                    
+                    # V18新增：如果未从returns计算，尝试从closes直接计算波动率
+                    if volatility is None and len(closes) >= 20:
+                        volatility = calculate_volatility(closes, period=20)
+                        if volatility is not None:
+                            volatility_pct = volatility * 100.0
                     
                     # 获取当前日期字符串（用于更新交易样本）
                     current_date_str = datetime.datetime.now().strftime('%Y-%m-%d')
@@ -7017,6 +7288,13 @@ try:
                         print(f"      📈 估算胜率: {kelly_info['win_rate']*100:.1f}% (基于置信度{confidence:.2f}和预测收益率{predicted_return_pct:.2f}%)")
                         print(f"      💰 估算平均盈利: {kelly_info['avg_win_pct']:.2f}% | 估算平均亏损: {kelly_info['avg_loss_pct']:.2f}%")
                         print(f"      📊 原始凯利值: {kelly_info['raw_kelly']*100:.1f}% | 安全凯利值: {kelly_info['safe_kelly']*100:.1f}%")
+                        # V18新增：显示基于波动率的动态仓位管理信息
+                        if ENABLE_VOLATILITY_POSITION and volatility is not None:
+                            max_position_limit = calculate_position_size(volatility, base_position=MAX_KELLY_POSITION)
+                            if volatility > VOLATILITY_THRESHOLD:
+                                print(f"      ⚠️  V18波动率风控: 历史波动率{volatility*100:.1f}% > {VOLATILITY_THRESHOLD*100:.0f}%，最大仓位已降至{max_position_limit*100:.0f}%")
+                            else:
+                                print(f"      ✅ V18波动率风控: 历史波动率{volatility*100:.1f}% ≤ {VOLATILITY_THRESHOLD*100:.0f}%，最大仓位{max_position_limit*100:.0f}%")
                         print(f"      💡 建议: 根据凯利公式（预测模式），当前最优仓位为{kelly_position*100:.1f}%")
                         print(f"      📝 提示: 交易样本基于模型预测每日更新，积累{KELLY_MIN_SAMPLES}个交易样本后，将使用历史统计数据进行更准确的仓位计算")
                     else:
@@ -7026,6 +7304,13 @@ try:
                         print(f"      📈 历史胜率: {kelly_info['win_rate']*100:.1f}% ({kelly_info['total_trades']}次交易)")
                         print(f"      💰 平均盈利: {kelly_info['avg_win_pct']:.2f}% | 平均亏损: {kelly_info['avg_loss_pct']:.2f}%")
                         print(f"      📊 原始凯利值: {kelly_info['raw_kelly']*100:.1f}% | 安全凯利值: {kelly_info['safe_kelly']*100:.1f}%")
+                        # V18新增：显示基于波动率的动态仓位管理信息
+                        if ENABLE_VOLATILITY_POSITION and volatility is not None:
+                            max_position_limit = calculate_position_size(volatility, base_position=MAX_KELLY_POSITION)
+                            if volatility > VOLATILITY_THRESHOLD:
+                                print(f"      ⚠️  V18波动率风控: 历史波动率{volatility*100:.1f}% > {VOLATILITY_THRESHOLD*100:.0f}%，最大仓位已降至{max_position_limit*100:.0f}%")
+                            else:
+                                print(f"      ✅ V18波动率风控: 历史波动率{volatility*100:.1f}% ≤ {VOLATILITY_THRESHOLD*100:.0f}%，最大仓位{max_position_limit*100:.0f}%")
                         print(f"      💡 建议: 根据凯利公式，当前最优仓位为{kelly_position*100:.1f}%")
                         print(f"      📝 提示: 交易样本基于模型预测每日更新，当前已有{trade_count}个交易样本")
                 

@@ -1,0 +1,11 @@
+[
+  {
+    "action": "hold",
+    "price": 23.07,
+    "date": "2026-01-07",
+    "predicted_return_pct": 0.3133555020818851,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-08 03:58:15"
+  }
+]

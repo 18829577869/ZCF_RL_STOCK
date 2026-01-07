@@ -1,0 +1,186 @@
+{
+  "report_date": "2025-01-06",
+  "initial_balance": 20000,
+  "total_stocks": 10,
+  "overall_stats": {
+    "avg_return": 30.06,
+    "avg_max_drawdown": 13.29,
+    "avg_sharpe_ratio": 1.54,
+    "avg_win_rate": 34.31,
+    "total_trades": 356,
+    "total_risk_events": 2593
+  },
+  "stock_performance": [
+    {
+      "rank": 1,
+      "name": "中国卫星",
+      "code": "600118",
+      "category": "航天军工",
+      "final_net_worth": 34268.97,
+      "total_return": 71.34,
+      "max_drawdown": 14.96,
+      "sharpe_ratio": 2.15,
+      "num_trades": 19,
+      "win_rate": 48.17,
+      "risk_events": 255
+    },
+    {
+      "rank": 2,
+      "name": "航天电子",
+      "code": "600879",
+      "category": "航天军工",
+      "final_net_worth": 29132.62,
+      "total_return": 45.66,
+      "max_drawdown": 16.49,
+      "sharpe_ratio": 1.75,
+      "num_trades": 41,
+      "win_rate": 53.21,
+      "risk_events": 271
+    },
+    {
+      "rank": 3,
+      "name": "亚钾国际",
+      "code": "000893",
+      "category": "基础化工",
+      "final_net_worth": 26883.81,
+      "total_return": 34.42,
+      "max_drawdown": 12.64,
+      "sharpe_ratio": 1.88,
+      "num_trades": 19,
+      "win_rate": 18.35,
+      "risk_events": 256
+    },
+    {
+      "rank": 4,
+      "name": "藏格矿业",
+      "code": "000408",
+      "category": "有色金属",
+      "final_net_worth": 26340.21,
+      "total_return": 31.70,
+      "max_drawdown": 11.32,
+      "sharpe_ratio": 2.17,
+      "num_trades": 16,
+      "win_rate": 30.29,
+      "risk_events": 239
+    },
+    {
+      "rank": 5,
+      "name": "盛达资源",
+      "code": "000603",
+      "category": "有色金属",
+      "final_net_worth": 25905.87,
+      "total_return": 29.53,
+      "max_drawdown": 19.41,
+      "sharpe_ratio": 1.31,
+      "num_trades": 55,
+      "win_rate": 37.61,
+      "risk_events": 307
+    },
+    {
+      "rank": 6,
+      "name": "神火股份",
+      "code": "000933",
+      "category": "有色金属",
+      "final_net_worth": 25838.09,
+      "total_return": 29.19,
+      "max_drawdown": 11.37,
+      "sharpe_ratio": 1.37,
+      "num_trades": 37,
+      "win_rate": 38.07,
+      "risk_events": 289
+    },
+    {
+      "rank": 7,
+      "name": "云铝股份",
+      "code": "000807",
+      "category": "有色金属",
+      "final_net_worth": 24463.03,
+      "total_return": 22.32,
+      "max_drawdown": 19.15,
+      "sharpe_ratio": 1.10,
+      "num_trades": 47,
+      "win_rate": 36.24,
+      "risk_events": 245
+    },
+    {
+      "rank": 8,
+      "name": "精达股份",
+      "code": "600577",
+      "category": "机械设备",
+      "final_net_worth": 22296.38,
+      "total_return": 11.48,
+      "max_drawdown": 20.18,
+      "sharpe_ratio": 0.66,
+      "num_trades": 64,
+      "win_rate": 33.49,
+      "risk_events": 237
+    },
+    {
+      "rank": 9,
+      "name": "驰宏锌锗",
+      "code": "600497",
+      "category": "有色金属",
+      "final_net_worth": 22857.29,
+      "total_return": 14.29,
+      "max_drawdown": 4.57,
+      "sharpe_ratio": 1.59,
+      "num_trades": 14,
+      "win_rate": 18.81,
+      "risk_events": 239
+    },
+    {
+      "rank": 10,
+      "name": "南山铝业",
+      "code": "600219",
+      "category": "有色金属",
+      "final_net_worth": 22130.54,
+      "total_return": 10.65,
+      "max_drawdown": 2.78,
+      "sharpe_ratio": 1.36,
+      "num_trades": 44,
+      "win_rate": 28.90,
+      "risk_events": 255
+    }
+  ],
+  "category_stats": {
+    "航天军工": {
+      "count": 2,
+      "avg_return": 58.50,
+      "avg_max_drawdown": 15.73,
+      "avg_sharpe_ratio": 1.95,
+      "total_trades": 60
+    },
+    "有色金属": {
+      "count": 6,
+      "avg_return": 22.95,
+      "avg_max_drawdown": 11.43,
+      "avg_sharpe_ratio": 1.49,
+      "total_trades": 213
+    },
+    "机械设备": {
+      "count": 1,
+      "avg_return": 11.48,
+      "avg_max_drawdown": 20.18,
+      "avg_sharpe_ratio": 0.66,
+      "total_trades": 64
+    },
+    "基础化工": {
+      "count": 1,
+      "avg_return": 34.42,
+      "avg_max_drawdown": 12.64,
+      "avg_sharpe_ratio": 1.88,
+      "total_trades": 19
+    }
+  },
+  "best_performer": {
+    "name": "中国卫星",
+    "code": "600118",
+    "return": 71.34
+  },
+  "worst_performer": {
+    "name": "南山铝业",
+    "code": "600219",
+    "return": 10.65
+  }
+}
+

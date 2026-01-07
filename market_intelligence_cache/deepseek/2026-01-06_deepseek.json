@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": 0.2,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.3,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.1,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "宏观经济温和复苏但动能不足，市场情绪谨慎乐观；政策支持持续但外部地缘风险与全球市场波动对A股构成一定压力，风险水平中等偏高。",
+  "date": "2026-01-06",
+  "source": "deepseek",
+  "timestamp": "2026-01-06T05:23:44.095236"
+}

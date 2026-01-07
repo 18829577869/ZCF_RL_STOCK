@@ -21,9 +21,36 @@
     "action": "hold",
     "price": 124.18,
     "date": "2025-12-31",
-    "predicted_return_pct": 1.0695764203063023,
+    "predicted_return_pct": 1.047158015678608,
     "confidence": 0.5,
     "operation": "未知动作",
-    "timestamp": "2026-01-03 06:08:30"
+    "timestamp": "2026-01-04 07:58:53"
+  },
+  {
+    "action": "hold",
+    "price": 122.16,
+    "date": "2026-01-05",
+    "predicted_return_pct": 0.1783194207021005,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-06 06:15:16"
+  },
+  {
+    "action": "hold",
+    "price": 122.07,
+    "date": "2026-01-06",
+    "predicted_return_pct": 0.2570853593103981,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-07 06:11:27"
+  },
+  {
+    "action": "hold",
+    "price": 122.66,
+    "date": "2026-01-07",
+    "predicted_return_pct": -0.23369941366606617,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-08 05:07:19"
   }
 ]

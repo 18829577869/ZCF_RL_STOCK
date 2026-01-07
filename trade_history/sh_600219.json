@@ -1,0 +1,20 @@
+[
+  {
+    "action": "hold",
+    "price": 5.5,
+    "date": "2026-01-05",
+    "predicted_return_pct": -0.09683059562335798,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-06 06:37:53"
+  },
+  {
+    "action": "hold",
+    "price": 5.67,
+    "date": "2026-01-06",
+    "predicted_return_pct": 0.2699923052779352,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-06 20:21:43"
+  }
+]

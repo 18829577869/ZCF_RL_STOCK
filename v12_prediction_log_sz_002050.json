@@ -10,5 +10,35 @@
     "predicted_price": 55.265313292145734,
     "current_price": 55.31,
     "timestamp": "2026-01-03 06:39:10"
+  },
+  {
+    "date": "2026-01-04",
+    "predicted_price": 55.669304057359696,
+    "current_price": 55.31,
+    "timestamp": "2026-01-04 08:20:40"
+  },
+  {
+    "date": "2026-01-05",
+    "predicted_price": 56.63623482227325,
+    "current_price": 56.28,
+    "timestamp": "2026-01-05 19:27:32"
+  },
+  {
+    "date": "2026-01-06",
+    "predicted_price": 56.92744629859924,
+    "current_price": 56.84,
+    "timestamp": "2026-01-06 20:27:23"
+  },
+  {
+    "date": "2026-01-07",
+    "predicted_price": 55.73159452617168,
+    "current_price": 55.75,
+    "timestamp": "2026-01-07 19:54:42"
+  },
+  {
+    "date": "2026-01-08",
+    "predicted_price": 55.80527902603149,
+    "current_price": 55.75,
+    "timestamp": "2026-01-08 04:17:28"
   }
 ]

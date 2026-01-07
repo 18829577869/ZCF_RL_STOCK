@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": -0.1,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.2,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.0,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "宏观经济温和复苏但动能不足，市场情绪受地缘政治与外部市场波动压制，政策托底但资金面谨慎，整体呈现结构性震荡格局。",
+  "date": "2026-01-04",
+  "source": "deepseek",
+  "timestamp": "2026-01-04T06:53:32.038545"
+}

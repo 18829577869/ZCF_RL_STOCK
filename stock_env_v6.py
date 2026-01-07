@@ -92,19 +92,28 @@ class StockTradingEnv(gym.Env):
         """识别标的类型（V6新增）"""
         filename = os.path.basename(data_file)
         
-        # 尝试从元数据加载
-        metadata_file = 'stockdata/metadata_v6.csv'
-        if os.path.exists(metadata_file):
-            metadata = pd.read_csv(metadata_file)
-            for _, row in metadata.iterrows():
-                if row['code'] in filename or row['name'] in filename:
-                    return {
-                        'code': row['code'],
-                        'name': row['name'],
-                        'category': row['category'],
-                        'volatility': row['volatility'],
-                        'style': row['style']
-                    }
+        # 尝试从多个可能的元数据文件加载
+        possible_metadata_files = [
+            'stockdata_v11_custom/metadata_v11_custom.csv',
+            'stockdata_v7_301017/metadata_v7_301017.csv',
+            'stockdata/metadata_v6.csv'
+        ]
+        
+        for metadata_file in possible_metadata_files:
+            if os.path.exists(metadata_file):
+                try:
+                    metadata = pd.read_csv(metadata_file)
+                    for _, row in metadata.iterrows():
+                        if row['code'] in filename or row['name'] in filename:
+                            return {
+                                'code': row['code'],
+                                'name': row['name'],
+                                'category': row['category'],
+                                'volatility': row['volatility'],
+                                'style': row['style']
+                            }
+                except Exception as e:
+                    continue
         
         # 默认配置
         return {
