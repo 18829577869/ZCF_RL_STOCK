@@ -1,0 +1,13 @@
+{
+  "date": "1995-04-20",
+  "macro_economic_score": 0.044,
+  "market_sentiment_score": 0.578,
+  "risk_level": 0.69,
+  "policy_impact_score": -0.111,
+  "emergency_impact_score": 0.024,
+  "capital_flow_score": -0.124,
+  "international_correlation": 0.463,
+  "vix_level": 20.8,
+  "source": "mock_data",
+  "timestamp": "2026-01-12T23:27:49.049574"
+}

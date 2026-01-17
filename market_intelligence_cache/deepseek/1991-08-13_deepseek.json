@@ -1,0 +1,13 @@
+{
+  "date": "1991-08-13",
+  "macro_economic_score": -0.061,
+  "market_sentiment_score": 0.28,
+  "risk_level": 0.677,
+  "policy_impact_score": 0.248,
+  "emergency_impact_score": 0.055,
+  "capital_flow_score": 0.003,
+  "international_correlation": 0.529,
+  "vix_level": 20.25,
+  "source": "mock_data",
+  "timestamp": "2026-01-12T23:27:48.676836"
+}

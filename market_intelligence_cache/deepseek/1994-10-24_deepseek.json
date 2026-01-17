@@ -1,0 +1,13 @@
+{
+  "date": "1994-10-24",
+  "macro_economic_score": 0.457,
+  "market_sentiment_score": 0.524,
+  "risk_level": 0.583,
+  "policy_impact_score": -0.129,
+  "emergency_impact_score": 0.058,
+  "capital_flow_score": 0.139,
+  "international_correlation": 0.333,
+  "vix_level": 14.09,
+  "source": "mock_data",
+  "timestamp": "2026-01-12T23:27:49.003742"
+}

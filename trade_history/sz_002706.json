@@ -75,9 +75,81 @@
     "action": "buy",
     "price": 11.17,
     "date": "2026-01-07",
-    "predicted_return_pct": 0.2998068541848575,
+    "predicted_return_pct": 0.2008924926084937,
     "confidence": 0.5,
     "operation": "买入 100%",
-    "timestamp": "2026-01-08 03:56:45"
+    "timestamp": "2026-01-08 10:51:35"
+  },
+  {
+    "action": "buy",
+    "price": 12.02,
+    "date": "2025-12-12",
+    "predicted_return_pct": -11.328560834910153,
+    "confidence": 0.4,
+    "operation": "持有",
+    "timestamp": "2026-01-13 01:00:55"
+  },
+  {
+    "action": "buy",
+    "price": 11.13,
+    "date": "2026-01-08",
+    "predicted_return_pct": 0.8147201822988507,
+    "confidence": 0.65,
+    "operation": "买入 100%",
+    "timestamp": "2026-01-08 21:25:14"
+  },
+  {
+    "action": "buy",
+    "price": 11.77,
+    "date": "2026-01-09",
+    "predicted_return_pct": -1.4304957476566755,
+    "confidence": 0.45,
+    "operation": "买入 25%",
+    "timestamp": "2026-01-11 18:03:50"
+  },
+  {
+    "action": "buy",
+    "price": 12.02,
+    "date": "2026-01-12",
+    "predicted_return_pct": -1.9808835078793239,
+    "confidence": 0.65,
+    "operation": "买入 100%",
+    "timestamp": "2026-01-13 17:21:02"
+  },
+  {
+    "action": "buy",
+    "price": 11.67,
+    "date": "2026-01-13",
+    "predicted_return_pct": -2.1846712810316924,
+    "confidence": 0.5,
+    "operation": "买入 100%",
+    "timestamp": "2026-01-13 21:21:34"
+  },
+  {
+    "action": "buy",
+    "price": 11.47,
+    "date": "2026-01-14",
+    "predicted_return_pct": 2.7302147309054603,
+    "confidence": 0.65,
+    "operation": "买入 100%",
+    "timestamp": "2026-01-14 18:03:08"
+  },
+  {
+    "action": "buy",
+    "price": 11.3,
+    "date": "2026-01-15",
+    "predicted_return_pct": 4.203599005673829,
+    "confidence": 0.65,
+    "operation": "买入 100%",
+    "timestamp": "2026-01-15 18:31:25"
+  },
+  {
+    "action": "buy",
+    "price": 11.23,
+    "date": "2026-01-16",
+    "predicted_return_pct": 1.8851364922120017,
+    "confidence": 0.65,
+    "operation": "买入 100%",
+    "timestamp": "2026-01-17 17:09:28"
   }
 ]

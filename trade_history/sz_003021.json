@@ -1,12 +1,12 @@
 [
   {
     "action": "hold",
-    "price": 121.88,
+    "price": 124.29,
     "date": "2025-12-29",
-    "predicted_return_pct": -2.6157602650691945,
+    "predicted_return_pct": -11.222015702163597,
     "confidence": 0.5,
     "operation": "未知动作",
-    "timestamp": "2025-12-30 03:21:22"
+    "timestamp": "2026-01-09 04:03:33"
   },
   {
     "action": "hold",
@@ -48,9 +48,63 @@
     "action": "hold",
     "price": 122.66,
     "date": "2026-01-07",
-    "predicted_return_pct": -0.23369941366606617,
+    "predicted_return_pct": -0.3301652586617482,
     "confidence": 0.5,
     "operation": "未知动作",
-    "timestamp": "2026-01-08 05:07:19"
+    "timestamp": "2026-01-08 12:00:25"
+  },
+  {
+    "action": "hold",
+    "price": 124.29,
+    "date": "2026-01-08",
+    "predicted_return_pct": -0.04473036489749303,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-08 22:15:36"
+  },
+  {
+    "action": "hold",
+    "price": 128.94,
+    "date": "2026-01-09",
+    "predicted_return_pct": 0.22982297543500527,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-11 19:10:12"
+  },
+  {
+    "action": "hold",
+    "price": 128.0,
+    "date": "2026-01-12",
+    "predicted_return_pct": 0.27491726726294186,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-12 19:01:23"
+  },
+  {
+    "action": "hold",
+    "price": 124.28,
+    "date": "2026-01-13",
+    "predicted_return_pct": 0.3379946626725238,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-13 22:44:08"
+  },
+  {
+    "action": "hold",
+    "price": 122.48,
+    "date": "2026-01-14",
+    "predicted_return_pct": 2.1146092215914147,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-14 19:49:30"
+  },
+  {
+    "action": "hold",
+    "price": 122.99,
+    "date": "2026-01-15",
+    "predicted_return_pct": -0.23635008565990848,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-15 20:09:24"
   }
 ]

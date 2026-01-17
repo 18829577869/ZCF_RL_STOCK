@@ -19,11 +19,20 @@
   },
   {
     "action": "hold",
-    "price": 53.18,
+    "price": 51.77,
     "date": "2026-01-07",
-    "predicted_return_pct": 0.31293705470045524,
+    "predicted_return_pct": 2.733396060774861,
     "confidence": 0.5,
     "operation": "未知动作",
-    "timestamp": "2026-01-08 04:42:52"
+    "timestamp": "2026-01-08 14:01:36"
+  },
+  {
+    "action": "hold",
+    "price": 51.27,
+    "date": "2026-01-08",
+    "predicted_return_pct": 0.8060673140214623,
+    "confidence": 0.5,
+    "operation": "未知动作",
+    "timestamp": "2026-01-08 21:53:53"
   }
 ]

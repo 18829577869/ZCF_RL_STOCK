@@ -57,9 +57,72 @@
     "action": "hold",
     "price": 77.61,
     "date": "2026-01-07",
-    "predicted_return_pct": -0.6940944925010142,
+    "predicted_return_pct": -0.758886607617023,
     "confidence": 0.5,
     "operation": "持有",
-    "timestamp": "2026-01-08 03:59:56"
+    "timestamp": "2026-01-08 10:54:47"
+  },
+  {
+    "action": "buy",
+    "price": 74.92,
+    "date": "2025-12-25",
+    "predicted_return_pct": -3.0479003423957627,
+    "confidence": 0.45,
+    "operation": "买入 25%",
+    "timestamp": "2026-01-09 03:25:47"
+  },
+  {
+    "action": "buy",
+    "price": 74.92,
+    "date": "2026-01-08",
+    "predicted_return_pct": 2.308935549128069,
+    "confidence": 0.65,
+    "operation": "买入 50%",
+    "timestamp": "2026-01-08 21:27:04"
+  },
+  {
+    "action": "hold",
+    "price": 76.95,
+    "date": "2026-01-09",
+    "predicted_return_pct": -0.6535779167259634,
+    "confidence": 0.5,
+    "operation": "持有",
+    "timestamp": "2026-01-11 18:12:53"
+  },
+  {
+    "action": "buy",
+    "price": 76.9,
+    "date": "2026-01-12",
+    "predicted_return_pct": 0.21202573296123642,
+    "confidence": 0.5,
+    "operation": "买入 50%",
+    "timestamp": "2026-01-13 17:30:43"
+  },
+  {
+    "action": "hold",
+    "price": 78.23,
+    "date": "2026-01-13",
+    "predicted_return_pct": -0.4090979209599058,
+    "confidence": 0.5,
+    "operation": "持有",
+    "timestamp": "2026-01-13 21:32:51"
+  },
+  {
+    "action": "buy",
+    "price": 79.35,
+    "date": "2026-01-14",
+    "predicted_return_pct": 0.4699413657714236,
+    "confidence": 0.5,
+    "operation": "买入 50%",
+    "timestamp": "2026-01-14 18:14:40"
+  },
+  {
+    "action": "buy",
+    "price": 77.1,
+    "date": "2026-01-15",
+    "predicted_return_pct": 0.45434404285348273,
+    "confidence": 0.5,
+    "operation": "买入 50%",
+    "timestamp": "2026-01-15 18:43:11"
   }
 ]

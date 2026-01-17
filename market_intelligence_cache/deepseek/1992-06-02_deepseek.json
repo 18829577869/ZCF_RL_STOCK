@@ -1,0 +1,13 @@
+{
+  "date": "1992-06-02",
+  "macro_economic_score": 0.349,
+  "market_sentiment_score": -0.307,
+  "risk_level": 0.618,
+  "policy_impact_score": 0.197,
+  "emergency_impact_score": -0.02,
+  "capital_flow_score": 0.042,
+  "international_correlation": 0.5,
+  "vix_level": 17.28,
+  "source": "mock_data",
+  "timestamp": "2026-01-12T23:27:48.760556"
+}

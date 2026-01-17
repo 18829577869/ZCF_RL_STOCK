@@ -1,0 +1,14 @@
+{
+  "macro_economic_score": 0.1,
+  "market_sentiment_score": -0.1,
+  "risk_level": 0.5,
+  "policy_impact_score": 0.2,
+  "emergency_impact_score": -0.1,
+  "capital_flow_score": 0.0,
+  "international_correlation": 0.7,
+  "vix_level": 22.0,
+  "reasoning": "预计2026年初经济处于温和复苏阶段，但市场情绪受全球不确定性及地缘摩擦影响偏谨慎，政策托底与外部波动并存，整体呈现结构性机会与风险平衡格局。",
+  "date": "2026-01-10",
+  "source": "deepseek",
+  "timestamp": "2026-01-10T02:19:27.782833"
+}
